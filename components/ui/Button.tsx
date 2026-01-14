@@ -11,7 +11,7 @@ interface AppButtonProps {
   className?: string;
 }
 
-export default function AppButton({
+export default function Button({
   children,
   icon: Icon,
   variant = "ghost",

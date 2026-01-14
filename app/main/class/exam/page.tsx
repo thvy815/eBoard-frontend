@@ -8,9 +8,11 @@ import StatCard from "@/components/ui/StatCard";
 import Legend from "@/components/ui/Legend";
 import { subjectColor } from "@/utils/subjectColor";
 import Button from "@/components/ui/Button";
+import AddExamModal from "@/components/exam/AddExamModal";
 
 export default function ExamPage() {
   const [data, setData] = useState<ExamSchedule[]>([]);
+  const [openAddModal, setOpenAddModal] = useState(false);
 
   useEffect(() => {
     examService.getExamSchedules().then(setData);
@@ -69,11 +71,21 @@ export default function ExamPage() {
             Đăng tải Excel
           </Button>
 
-          <Button icon={Plus} variant="primary" className="rounded-xl">
-            Thêm lịch kiểm tra
+          <Button
+            icon={Plus}
+            variant="primary"
+            className="rounded-xl"
+            onClick={() => setOpenAddModal(true)}
+          >
+            Thêm lịch thi
           </Button>
         </div>
       </div>
+
+      <AddExamModal
+        open={openAddModal}
+        onClose={() => setOpenAddModal(false)}
+      />
 
       {/* Calendar */}
       <div className="bg-white rounded-xl p-6 space-y-4 shadow-sm">

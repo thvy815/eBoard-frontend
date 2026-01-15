@@ -1,5 +1,12 @@
-export interface Student {
-  id: number;
-  name: string;
-  age: number;
-}
+export type StudentRow = {
+  id: string;
+  fullName: string;
+  dob: string;        // dd/mm/yyyy
+  address: string;
+  parentName: string;
+  email: string;
+  phone: string;      // username
+  password: string;
+};
+
+export type ImportedStudent = StudentRow;

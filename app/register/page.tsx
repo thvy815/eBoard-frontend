@@ -77,18 +77,18 @@ export default function RegisterPage() {
             placeholder="Nhập số điện thoại (10 chữ số)"
             required
             value={form.phone}
-            onChange={(e) =>
-              handleChange({
-                ...e,
-                target: {
-                  ...e.target,
-                  value: e.target.value.replace(/\D/g, "").slice(0, 10),
-                },
-              } as any)
+            onChange={(e) => {
+                const value = e.target.value.replace(/\D/g, "").slice(0, 10);
+                setForm((prev) => ({ ...prev, phone: value }));
+            }}
+            error={
+                form.phone.length > 0 && !isPhoneValid
+                ? "Số điện thoại phải đúng 10 chữ số"
+                : undefined
             }
-            error={form.phone.length > 0 && !isPhoneValid ? "Số điện thoại phải đúng 10 chữ số" : undefined}
             primary={PRIMARY}
-          />
+            />
+
 
           <Input
             label="Email"

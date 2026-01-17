@@ -56,23 +56,21 @@ export default function ScoreFilters({
   /* ================= LOAD DATA ================= */
 
   useEffect(() => {
-    scoreService.getSemesters().then((data) =>
-      setSemesters(
-        data.map((s) => ({
-          value: Number(s.value),
-          label: s.label,
-        }))
-      )
-    );
-  }, []);
+  setSemesters([
+    { value: 1, label: "Học kỳ 1" },
+    { value: 2, label: "Học kỳ 2" },
+  ]);
+}, []);
+
 
   useEffect(() => {
-    scoreService.getSubjects().then((data) => {
-      // đảm bảo KHÔNG có "all" từ backend
-      setSubjects(data.filter((s) => s.id !== "all"));
-    });
-  }, []);
+  if (!classId) return;
 
+  scoreService.getSubjects(classId).then((data) => {
+    // đảm bảo KHÔNG có "all" từ backend
+    setSubjects(data.filter((s) => s.id !== "all"));
+  });
+}, [classId]);
   useEffect(() => {
     if (!classId) return;
     scoreService.getStudents(classId).then(setStudents);

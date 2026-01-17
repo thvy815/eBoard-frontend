@@ -24,13 +24,10 @@ export default function ScoreInputModal({
   studentId: studentIdFromParent,
 }: Props) {
   const [studentId, setStudentId] = useState<string>();
-
-  const [students, setStudents] = useState<
-    { id: string; name: string }[]
-  >([]);
-
+  const [students, setStudents] = useState<{ id: string; name: string }[]>([]);
   const [scores, setScores] = useState<SubjectScore[]>([]);
   const [loading, setLoading] = useState(false);
+  const [studentName, setStudentName] = useState("");
 
   /* ===== LOAD STUDENTS WHEN OPEN ===== */
   useEffect(() => {
@@ -40,7 +37,7 @@ export default function ScoreInputModal({
     setScores([]);
 
     scoreService.getStudents(classId).then(setStudents);
-  }, [open, classId]);
+  }, [open, classId, studentIdFromParent]);
 
   /* ===== LOAD SCORE OF STUDENT ===== */
   useEffect(() => {
@@ -54,13 +51,53 @@ export default function ScoreInputModal({
         semester,
         studentId,
       })
-      .then((data) => {
-        // 👉 Có dữ liệu → sửa
-        // 👉 Không có → BE trả về danh sách môn với null
-        setScores(data);
+      .then(async (data) => {
+        // ✅ ĐÃ CÓ BẢNG ĐIỂM
+        if (data.length > 0) {
+          setScores(data);
+          return;
+        }
+
+        // ❗ CHƯA CÓ → LOAD DANH SÁCH MÔN
+        const subjects = await scoreService.getSubjects(classId);
+
+        setScores(
+          subjects.map((s) => ({
+            subjectId: s.id,
+            subjectName: s.name,
+            midTermScore: null,
+            finalTermScore: null,
+            averageScore: null,
+          }))
+        );
+      })
+      .catch(async () => {
+        // ⚠️ TRƯỜNG HỢP BE TRẢ 404
+        const subjects = await scoreService.getSubjects(classId);
+
+        setScores(
+          subjects.map((s) => ({
+            subjectId: s.id,
+            subjectName: s.name,
+            midTermScore: null,
+            finalTermScore: null,
+            averageScore: null,
+          }))
+        );
       })
       .finally(() => setLoading(false));
   }, [studentId, classId, semester]);
+
+
+  /* ===== LOAD STUDENT NAME (WHEN FIXED STUDENT) ===== */
+  useEffect(() => {
+    if (!studentIdFromParent) return;
+
+    scoreService.getStudents(classId).then((data) => {
+      const found = data.find((s) => s.id === studentIdFromParent);
+      if (found) setStudentName(found.name);
+    });
+  }, [studentIdFromParent, classId]);
 
   /* ===== HANDLE CHANGE ===== */
   const updateScore = (
@@ -70,9 +107,7 @@ export default function ScoreInputModal({
   ) => {
     setScores((prev) =>
       prev.map((s) =>
-        s.subjectId === subjectId
-          ? { ...s, [field]: value }
-          : s
+        s.subjectId === subjectId ? { ...s, [field]: value } : s
       )
     );
   };
@@ -80,36 +115,24 @@ export default function ScoreInputModal({
   /* ===== SAVE ===== */
   const handleSave = async () => {
     if (!studentId) return;
-    const mappedScores = scores.map(item => ({
-    subjectId: item.subjectId,
-    score:
-      item.midTermScore !== null && item.finalTermScore !== null
-        ? Math.round((item.midTermScore + item.finalTermScore) / 2)
-        : null,
-  }));
 
+    const mappedScores = scores.map((item) => ({
+      subjectId: item.subjectId,
+      midtermScore: item.midTermScore ?? 0,
+      finalScore: item.finalTermScore ?? 0,
+    }));
 
     await scoreService.saveScores({
+      classId,
       studentId,
       semester,
-       scores: mappedScores,
+      scores: mappedScores,
     });
 
     onClose();
   };
+
   /* ===== RENDER ===== */
-  const [studentName, setStudentName] = useState("");
-  useEffect(() => {
-  if (!studentIdFromParent) return;
-
-  scoreService.getStudents(classId).then((data) => {
-    const found = data.find(
-      (s) => s.id === studentIdFromParent
-    );
-    if (found) setStudentName(found.name);
-  });
-}, [studentIdFromParent, classId]);
-
   return (
     <Modal
       open={open}
@@ -175,22 +198,14 @@ export default function ScoreInputModal({
             {!loading &&
               scores.map((s, idx) => (
                 <tr key={s.subjectId} className="border-t">
-                  <td className="px-3 py-2 text-center">
-                    {idx + 1}
-                  </td>
-                  <td className="px-3 py-2">
-                    {s.subjectName}
-                  </td>
+                  <td className="px-3 py-2 text-center">{idx + 1}</td>
+                  <td className="px-3 py-2">{s.subjectName}</td>
 
                   <td className="px-3 py-2 text-center">
                     <ScoreSelect
                       value={s.midTermScore}
                       onChange={(v) =>
-                        updateScore(
-                          s.subjectId,
-                          "midTermScore",
-                          v
-                        )
+                        updateScore(s.subjectId, "midTermScore", v)
                       }
                     />
                   </td>
@@ -199,11 +214,7 @@ export default function ScoreInputModal({
                     <ScoreSelect
                       value={s.finalTermScore}
                       onChange={(v) =>
-                        updateScore(
-                          s.subjectId,
-                          "finalTermScore",
-                          v
-                        )
+                        updateScore(s.subjectId, "finalTermScore", v)
                       }
                     />
                   </td>

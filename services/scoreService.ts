@@ -1,251 +1,149 @@
+import { api } from "@/lib/api";
 import {
   ScoreStat,
   StudentScore,
   SubjectScore,
   ScoreDetailSummary,
   Subject,
-  ScoreBySubject,
 } from "@/types/score";
-
-/* ================= FAKE DELAY ================= */
-const fakeDelay = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-/* ================= MOCK DATA ================= */
-
-/* ---- Thống kê lớp ---- */
-const mockStats: ScoreStat[] = [
-  { label: "Xuất sắc", value: 5, type: "excellent" },
-  { label: "Giỏi", value: 10, type: "good" },
-  { label: "Khá", value: 8, type: "average" },
-  { label: "Yếu", value: 2, type: "weak" },
-];
-/* ---- Danh sách môn học ---- */
-const mockSubjects: Subject[] = [
-  { id: "sub-1", name: "Toán" },
-  { id: "sub-2", name: "Ngữ văn" },
-  { id: "sub-3", name: "Tiếng Anh" },
-];
-
-interface GetScoreBySubjectParams {
-  classId: string;
-  semester: number;
-  subjectId: string;
-}
-/* ---- Danh sách học sinh + điểm TB ---- */
-const mockStudentScoresByClass: Record<
-  string,
-  StudentScore[]
-> = {
-  "b7f3b2c2-4e1a-4e8f-9d9c-123456789abc": [
-    {
-      studentId: "stu-1",
-      studentName: "Nguyễn Văn An",
-      averageScore: 8.9,
-      grade: "Giỏi",
-    },
-    {
-      studentId: "stu-2",
-      studentName: "Trần Thị Bình",
-      averageScore: 7.8,
-      grade: "Khá",
-    },
-  ],
-};
-
-/* ---- Học kỳ ---- */
-const mockSemesters = [
-  { value: 1, label: "Học kỳ 1" },
-  { value: 2, label: "Học kỳ 2" },
-];
-
-/* ---- Học sinh theo lớp ---- */
-const mockStudentsByClass: Record<
-  string,
-  { id: string; name: string }[]
-> = {
-  "b7f3b2c2-4e1a-4e8f-9d9c-123456789abc": [
-    { id: "stu-1", name: "Nguyễn Văn An" },
-    { id: "stu-2", name: "Trần Thị Bình" },
-  ],
-};
-
-/* ---- Điểm chi tiết theo môn ---- */
-const mockSubjectScores: SubjectScore[] = [
-  {
-    subjectId: "sub-1",
-    subjectName: "Toán",
-    midTermScore: 9,
-    finalTermScore: 8,
-    averageScore: 8.5,
-  },
-  {
-    subjectId: "sub-2",
-    subjectName: "Tiếng Việt",
-    midTermScore: 7,
-    finalTermScore: 8,
-    averageScore: 7.5,
-  },
-  {
-    subjectId: "sub-3",
-    subjectName: "Tiếng Anh",
-    midTermScore: null,
-    finalTermScore: null,
-    averageScore: null,
-  },
-];
-
-const MOCK_SCORE_BY_SUBJECT: ScoreBySubject[] = [
-  {
-    studentId: "stu-1",
-    studentName: "Nguyễn Văn An",
-    subjectId: "sub-1",
-    midtermScore: 8.0,
-    finalScore: 8.0,
-    averageScore: 8.0,
-    grade: "Giỏi",
-    note: "",
-  },
-  {
-    studentId: "stu-2",
-    studentName: "Trần Thị Bình",
-    subjectId: "sub-1",
-    midtermScore: 8.0,
-    finalScore: 8.0,
-    averageScore: 8.0,
-    grade: "Giỏi",
-    note: "",
-  },
-  {
-    studentId: "stu-3",
-    studentName: "Lê Minh Châu",
-    subjectId: "sub-1",
-    midtermScore: 9.0,
-    finalScore: 8.0,
-    averageScore: 9.0,
-    grade: "Giỏi",
-    note: "Học tốt",
-  },
-];
 
 /* ================= SERVICE ================= */
 
 export const scoreService = {
-  /* ====== Thống kê lớp ====== */
-  getStats: async (params: {
+  /* ====== Thống kê + danh sách lớp ====== */
+  async getStats(params: {
     classId: string;
     semester: number;
-  }): Promise<ScoreStat[]> => {
-    await fakeDelay(300);
-    console.log("Fetch stats:", params);
-    return mockStats;
+  }): Promise<ScoreStat[]> {
+    const res = await api.get(
+      `/score/${params.classId}/summary/${params.semester}`
+    );
+
+    const data = res.data;
+
+    return [
+      { label: "Xuất sắc", value: data.excellentCount, type: "excellent" },
+      { label: "Giỏi", value: data.goodCount, type: "good" },
+      { label: "Khá", value: data.averageCount, type: "average" },
+      { label: "Yếu", value: data.poorCount, type: "weak" },
+    ];
   },
 
-  /* ====== Danh sách điểm cả lớp ====== */
-  getStudentScores: async (params: {
+  async getStudentScores(params: {
     classId: string;
     semester: number;
-  }): Promise<StudentScore[]> => {
-    await fakeDelay(400);
-    console.log("Fetch class scores:", params);
-    return mockStudentScoresByClass[params.classId] ?? [];
+  }): Promise<StudentScore[]> {
+    const res = await api.get(
+      `/score/${params.classId}/summary/${params.semester}`
+    );
+
+    return res.data.studentScores.map((s: any) => ({
+      studentId: s.studentId,
+      studentName: s.studentName,
+      averageScore: s.averageScore,
+      grade: s.grade,
+    }));
   },
 
-  /* ====== Dropdown ====== */
-  getSemesters: async (): Promise<
-    { value: number; label: string }[]
-  > => {
-    await fakeDelay(200);
-    return mockSemesters;
-  },
-
-  getStudents: async (
-    classId: string
-  ): Promise<{ id: string; name: string }[]> => {
-    await fakeDelay(300);
-    return mockStudentsByClass[classId] ?? [];
-  },
-
-  /* ====== Điểm chi tiết học sinh ====== */
-  getSubjectScores: async (params: {
+  /* ====== Bảng điểm chi tiết học sinh ====== */
+  async getSubjectScores(params: {
     classId: string;
-    semester: number;
     studentId: string;
-  }): Promise<SubjectScore[]> => {
-    await fakeDelay(400);
-    console.log("Fetch student detail:", params);
-    return mockSubjectScores;
+    semester: number;
+  }): Promise<SubjectScore[]> {
+    try {
+      const res = await api.get(
+        `/score/${params.classId}/student/${params.studentId}/scores/${params.semester}`
+      );
+
+      return res.data.subjectScores.map((s: any) => ({
+        subjectId: s.subjectId,
+        subjectName: s.subjectName,
+        midTermScore: s.midtermScore,
+        finalTermScore: s.finalScore,
+        averageScore: s.averageScore,
+      }));
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        // 👉 CHƯA CÓ BẢNG ĐIỂM → LẤY MÔN HỌC
+        const subjectsRes = await api.get(
+          `/score/${params.classId}/subjects`
+        );
+
+        return subjectsRes.data.map((s: any) => ({
+          subjectId: s.id,
+          subjectName: s.name,
+          midTermScore: null,
+          finalTermScore: null,
+          averageScore: null,
+        }));
+      }
+
+      throw err;
+    }
   },
 
-getScoreBySubject: async (
-  params: GetScoreBySubjectParams
-): Promise<ScoreBySubject[]> => {
-  await fakeDelay(400);
-  console.log("Fetch score by subject:", params);
-
-  return MOCK_SCORE_BY_SUBJECT.filter(
-    (s) => s.subjectId === params.subjectId
-  );
-},
-
-/* ====== Lưu điểm theo môn ====== */
-saveScoresBySubject: async (payload: {
-  classId: string;
-  semester: number;
-  subjectId: string;
-  scores: {
+  /* ====== Tổng kết học kỳ học sinh ====== */
+  async getScoreDetailSummary(params: {
+    classId: string;
     studentId: string;
-    midtermScore: number | null;
-    finalScore: number | null;
-    note?: string;
-  }[];
-}) => {
-  await fakeDelay(500);
+    semester: number;
+  }): Promise<ScoreDetailSummary | null> {
+    try {
+      const res = await api.get(
+        `/score/${params.classId}/student/${params.studentId}/scores/${params.semester}`
+      );
 
-  console.log("SAVE SCORE BY SUBJECT:", payload);
+      return {
+        averageScore: res.data.averageScore,
+        grade: res.data.grade,
+        rank: res.data.rank,
+      };
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        // chưa có bảng điểm → hợp lệ
+        return null;
+      }
+      throw err; // lỗi khác thì vẫn throw
+    }
+  },
 
-  // MOCK success
-  return { success: true };
-},
-
-
-  /* ====== Lưu điểm ====== */
-  saveScores: async (payload: {
+  /* ====== Lưu / cập nhật bảng điểm học sinh ====== */
+  async saveScores(payload: {
+    classId: string;
     studentId: string;
     semester: number;
     scores: {
       subjectId: string;
-      score: number | null;
+      midtermScore: number;
+      finalScore: number;
     }[];
-  }) => {
-    await fakeDelay(500);
-    console.log("SAVE SCORE:", payload);
-    return { success: true };
+  }) {
+    return api.put(
+      `/score/${payload.classId}/student/${payload.studentId}/scores/${payload.semester}`,
+      {
+        subjectScores: payload.scores,
+      }
+    );
   },
 
-  /* ====== Tổng kết học kỳ của 1 học sinh ====== */
-  getScoreDetailSummary: async (params: {
-    classId: string;
-    semester: number;
-    studentId: string;
-  }): Promise<ScoreDetailSummary> => {
-    await fakeDelay(300);
-    console.log("Fetch score summary:", params);
+  /* ====== Danh sách học sinh theo lớp (option) ====== */
+  async getStudents(classId: string): Promise<{ id: string; name: string }[]> {
+    const res = await api.get(`/students/${classId}/lists`);
 
-    // MOCK DATA
-    return {
-      averageScore: 8.1,
-      grade: "Giỏi",
-      rank: 2,
-    };
+    return res.data.map((s: any) => ({
+      id: s.id,
+      name: s.fullName,
+    }));
   },
 
-  getSubjects: async (): Promise<Subject[]> => {
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(mockSubjects), 300);
-    });
+  /* ====== Môn học của lớp ====== */
+  async getSubjects(classId: string): Promise<Subject[]> {
+    const res = await api.get(`/score/${classId}/subjects`);
+
+    return res.data.map((s: any) => ({
+      id: s.id,
+      name: s.name,
+    }));
   },
-  
 };
-
-

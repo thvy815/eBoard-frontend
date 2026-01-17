@@ -19,9 +19,11 @@ import ScorePrintModal from "@/components/class/score/ScorePrintModal";
 import { exportScoreExcel } from "@/utils/exportScoreExcel";
 import ScoreBySubjectPrintModal from "@/components/class/score/ScoreBySubjectPrintModal";
 import { exportScoreBySubjectExcel } from "@/utils/exportScoreBySubjectExcel";
+import BatchStudentPrintModal from "@/components/class/score/BatchStudentPrintModal";
+import SingleScorePrintModal from "@/components/class/score/BatchStudentPrintModal";
 
 export default function StudyResultPage() {
-  const classId = "b7f3b2c2-4e1a-4e8f-9d9c-123456789abc";
+  const classId = "27f5cded-0c8a-4aa0-a099-718ac7434a3b"; // 1A
 
   const [semester, setSemester] = useState(1);
   const [studentId, setStudentId] = useState<"all" | string>("all");
@@ -35,17 +37,20 @@ export default function StudyResultPage() {
   const [summary, setSummary] = useState<ScoreDetailSummary | null>(null);
   const [openPrint, setOpenPrint] = useState(false);
 
-  const isPrintAll = studentId === "all" && subjectId === "all";
+  const isPrintAllClass = studentId === "all" && subjectId === "all";
   const isPrintBySubject = studentId === "all" && subjectId !== "all";
+  const isPrintSingleStudent = studentId !== "all";
 
   /* ===== LOAD STATS ===== */
   useEffect(() => {
-    scoreService.getStats({ classId, semester }).then(setStats);
-  }, [classId, semester]);
+      scoreService.getStats({ classId, semester }).then(setStats);
+    }, [classId, semester]);
 
-  /* ===== LOAD DATA ===== */
-  useEffect(() => {
-    // Tổng quan
+    /* ===== LOAD DATA ===== */
+    useEffect(() => {
+    if (!classId) return;
+
+    // ===== Tổng quan =====
     if (studentId === "all" && subjectId === "all") {
       scoreService
         .getStudentScores({ classId, semester })
@@ -53,19 +58,28 @@ export default function StudyResultPage() {
       return;
     }
 
-    // Theo môn
+    // ===== Theo môn (CHƯA IMPLEMENT → KHÔNG GỌI API SAI) =====
     if (studentId === "all" && subjectId !== "all") {
-      scoreService
-        .getScoreBySubject({ classId, semester, subjectId })
-        .then(setScoreBySubject);
+      // TODO: getScoreBySubject
       return;
     }
 
-    // Theo học sinh
-    scoreService
-      .getSubjectScores({ classId, semester, studentId })
-      .then(setSubjectScores);
+    // ===== Theo học sinh =====
+    if (studentId !== "all") {
+      scoreService
+        .getSubjectScores({ classId, semester, studentId })
+        .then(setSubjectScores)
+        .catch(err => {
+          // 404 = chưa có bảng điểm → hợp lệ
+          if (err.response?.status === 404) {
+            setSubjectScores([]);
+            return;
+          }
+          throw err;
+        });
+    }
   }, [classId, semester, studentId, subjectId]);
+
 
   /* ===== SUMMARY ===== */
   useEffect(() => {
@@ -121,7 +135,9 @@ export default function StudyResultPage() {
         onExportExcel={handleExportExcel}
       />
 
-      {isPrintAll && (
+      {/* ===== PRINT MODALS ===== */}
+
+      {isPrintAllClass && (
         <ScorePrintModal
           open={openPrint}
           onClose={() => setOpenPrint(false)}
@@ -143,6 +159,25 @@ export default function StudyResultPage() {
           subjectName={selectedSubjectName}
         />
       )}
+
+      {isPrintSingleStudent && (
+        <SingleScorePrintModal
+          open={openPrint}
+          onClose={() => setOpenPrint(false)}
+          classId={classId}
+          className={classInfo.name}
+          schoolYear={classInfo.Year}
+          semester={semester}
+          student={{
+            id: studentId,
+            name:
+              students.find(s => s.studentId === studentId)
+                ?.studentName ?? "",
+          }}
+        />
+      )}
+
+
 
 
       {/* ===== TABLE ===== */}

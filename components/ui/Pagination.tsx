@@ -9,8 +9,17 @@ export default function Pagination({ page, totalPages, onChange }: Props) {
 
   const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
 
+  const stop = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   return (
-    <div className="flex justify-center items-center gap-2 mt-4">
+    <div
+      className="flex justify-center items-center gap-2 mt-4"
+      onMouseDown={stop}   // 🔥 CHẶN CLICK XUYÊN
+      onClick={stop}
+    >
       {/* Prev */}
       <button
         disabled={page === 1}

@@ -1,4 +1,5 @@
-import { Class } from "@/types/Class";
+import { Class, ClassInfo } from "@/types/Class";
+import { api } from "@/lib/api";
 
 export async function getMyClasses(): Promise<Class[]> {
   return Promise.resolve([
@@ -13,3 +14,12 @@ export async function getMyClasses(): Promise<Class[]> {
     },
   ]);
 }
+
+export const classService = {
+  getClassById(classId: string) {
+    return api
+      .get<ClassInfo>(`/classes/${classId}`)
+      .then(res => res.data);
+  },
+};
+

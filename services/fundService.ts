@@ -3,6 +3,8 @@ import {
   ClassFund,
   FundIncome,
   FundExpense,
+  FundIncomeStudent,
+  FundIncomeDetailDto,
 } from "@/types/fund";
 
 /* ===== DTO TYPES ===== */
@@ -49,8 +51,26 @@ export const fundService = {
 
   getIncomeDetailsByStudent(incomeId: string, studentId: string) {
     return api
-      .get(`/funds/income/${incomeId}/details/${studentId}`)
-      .then(res => res.data);
+      .get<FundIncomeDetailDto[]>(
+        `/funds/income/${incomeId}/details/${studentId}`
+      )
+      .then(res =>
+        res.data.map(i => ({
+          id: i.id,                       // ✅ ID thật từ BE
+          content: i.contributedInfo,
+          amount: i.contributedAmount,
+          contributedAt: i.contributedAt,
+          notes: i.notes,
+        }))
+      );
+  },
+
+  updateIncomeDetail(detailId: string, payload: {
+    contributedAmount: number;
+    contributedAt: string;
+    notes?: string;
+  }) {
+    return api.put(`/funds/income/details/${detailId}`, payload);
   },
 
   getIncomeByStudent(studentId: string) {

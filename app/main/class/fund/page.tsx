@@ -23,7 +23,7 @@ import FundReportPrintModal from "@/components/class/fund/FundReportPrintModal";
 
 
 export default function FundPage() {
-  const classId = "fc23fd72-6527-47ed-97c5-5e320060f457";
+  const classId = "fc23fd72-6527-47ed-97c5-5e320060f457"; 
 
   const [classInfo, setClassInfo] = useState<ClassInfo>();
   const [fund, setFund] = useState<ClassFund>();

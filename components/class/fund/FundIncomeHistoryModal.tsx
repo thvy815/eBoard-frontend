@@ -5,6 +5,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { fundService } from "@/services/fundService";
 import FundIncomeHistoryTable from "./FundIncomeHistoryTable";
+import EditFundIncomeHistoryModal from "./EditFundIncomeHistoryModal";
 
 interface HistoryItem {
   id: string;
@@ -33,17 +34,22 @@ export default function FundIncomeHistoryModal({
 }: Props) {
   const [data, setData] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [editingItem, setEditingItem] = useState<HistoryItem | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !incomeId || !studentId) return;
 
     setLoading(true);
     fundService
       .getIncomeDetailsByStudent(incomeId, studentId)
-      .then(setData)
+      .then(res => {
+        console.log("History data:", res); // 👈 debug
+        setData(res);
+      })
       .catch(() => setData([]))
       .finally(() => setLoading(false));
   }, [open, incomeId, studentId]);
+
 
   const total = useMemo(
     () => data.reduce((sum, i) => sum + i.amount, 0),
@@ -82,7 +88,7 @@ export default function FundIncomeHistoryModal({
         {loading ? (
           <div className="p-10 text-center">Đang tải...</div>
         ) : (
-          <FundIncomeHistoryTable data={data} />
+          <FundIncomeHistoryTable data={data} onEdit={item => setEditingItem(item)} />
         )}
 
         {/* ===== FOOTER ===== */}
@@ -91,6 +97,34 @@ export default function FundIncomeHistoryModal({
             Đóng
           </Button>
         </div>
+
+        {editingItem && (
+          <EditFundIncomeHistoryModal
+            open={!!editingItem}
+            item={editingItem}
+            onClose={() => setEditingItem(null)}
+            onSubmit={payload => {
+              // 👉 CALL API UPDATE Ở ĐÂY
+              console.log("Update payload:", payload);
+
+              // demo update local
+              setData(prev =>
+                prev.map(i =>
+                  i.id === payload.id
+                    ? {
+                        ...i,
+                        amount: payload.amount,
+                        contributedAt: payload.contributedAt,
+                        notes: payload.notes,
+                      }
+                    : i
+                )
+              );
+              setEditingItem(null);
+            }}
+          />
+        )}
+
       </div>
     </Modal>
   );

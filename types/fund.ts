@@ -58,4 +58,14 @@ export interface FundIncomeSummary {
   latestNotes: string;
 }
 
+export interface FundIncomeDetailDto {
+  id: string;
+  contributedAmount: number;
+  contributedInfo: string;
+  contributedAt: string; // yyyy-MM-dd
+  contributionStatus: string;
+  deadline: string; // yyyy-MM-dd
+  notes: string;
+}
+
 

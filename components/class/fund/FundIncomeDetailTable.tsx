@@ -126,13 +126,6 @@ export default function FundIncomeDetailTable({
                         >
                           <span className="sr-only">Xem lịch sử</span>
                         </Button>
-
-                        <Button
-                          icon={Pencil}
-                          onClick={() => onEdit?.(s.studentId)}
-                        >
-                          <span className="sr-only">Chỉnh sửa</span>
-                        </Button>
                       </div>
                     </td>
                   </tr>

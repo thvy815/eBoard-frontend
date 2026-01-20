@@ -4,43 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { classService } from "@/services/classService";
+import type { ClassItem, ClassesPagedResponse } from "@/types/Class";
+import { ymRange } from "@/utils/date";
+import { mapToClassItem } from "@/utils/classMapper";
+import { isCurrentClass, isPastClass } from "@/utils/classStatus";
+import ClassDetailModal from "@/components/class/ClassDetailModal";
 
 const PRIMARY = "#518581";
 const SELECTED_CLASS_ID_KEY = "selectedClassId";
 const CURRENT_TEACHER_ID_KEY = "teacherId";
 const MOCK_TEACHER_ID = "0ae25138-f3ca-43a4-aa36-d485f2e5f323";
-
-type ClassItem = {
-  id: string;
-  name: string;
-  gradeLabel: string;
-  roomName: string;
-  startDate: string; // yyyy-mm-dd or ISO
-  endDate: string; // yyyy-mm-dd or ISO
-  currentStudentCount: number;
-  maxCapacity: number;
-  classDescription?: string;
-};
-
-function ymRange(startDate: string, endDate: string) {
-  const s = startDate?.slice(0, 7) ?? "";
-  const e = endDate?.slice(0, 7) ?? "";
-  return s && e ? `${s} - ${e}` : "-";
-}
-
-// normalize date to ISO-like string (keep as "yyyy-mm-dd" if possible)
-function normDateAny(d: any) {
-  if (!d) return "";
-  const s = String(d);
-  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (m?.[1]) return m[1];
-  const dt = new Date(s);
-  if (isNaN(dt.getTime())) return s;
-  const yyyy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
 
 function getTeacherId() {
   try {
@@ -48,27 +21,6 @@ function getTeacherId() {
   } catch {
     return MOCK_TEACHER_ID;
   }
-}
-
-// map API object -> UI item (chịu được nhiều shape khác nhau)
-function mapToClassItem(x: any): ClassItem {
-  const gradeLabel =
-    x?.gradeLabel ??
-    x?.gradeName ??
-    x?.grade?.name ??
-    (x?.gradeId ? `Khối ${String(x.gradeId).slice(0, 6)}...` : "-");
-
-  return {
-    id: x?.id,
-    name: x?.name ?? "-",
-    gradeLabel,
-    roomName: x?.roomName ?? "-",
-    startDate: normDateAny(x?.startDate),
-    endDate: normDateAny(x?.endDate),
-    currentStudentCount: Number(x?.currentStudentCount ?? 0),
-    maxCapacity: Number(x?.maxCapacity ?? 0),
-    classDescription: x?.classDescription ?? x?.description ?? "",
-  };
 }
 
 export default function MyClassesPage() {
@@ -84,7 +36,9 @@ export default function MyClassesPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
 
-  // load teaching classes
+  const pageNumber = 1;
+  const pageSize = 50;
+
   useEffect(() => {
     let mounted = true;
 
@@ -95,14 +49,18 @@ export default function MyClassesPage() {
 
         const teacherId = getTeacherId();
 
-        // GET /api/classes/teaching?teacherId=...
-        const data = await classService.getTeachingClasses(teacherId);
+        // ✅ API mới: /api/classes?teacherId=...&pageNumber=...&pageSize=...
+        const res: ClassesPagedResponse<any> = await classService.getAllClassesByTeacher(
+          teacherId,
+          pageNumber,
+          pageSize
+        );
 
-        // data có thể là array trực tiếp, hoặc nằm trong items/data/etc
-        const listRaw: any[] =
-          Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : Array.isArray(data?.data) ? data.data : [];
-
+        const listRaw = Array.isArray(res?.data) ? res.data : [];
         const mapped = listRaw.map(mapToClassItem).filter((c) => !!c.id);
+
+        // sort mới nhất trước cho đẹp
+        mapped.sort((a, b) => (b.startDate || "").localeCompare(a.startDate || ""));
 
         if (mounted) setClasses(mapped);
       } catch (e: any) {
@@ -117,23 +75,19 @@ export default function MyClassesPage() {
     };
   }, []);
 
-  // Demo: lớp hiện tại = lớp đầu (giữ đúng UI m đang dùng)
-  const currentClass = classes[0];
-  const otherClasses = useMemo(() => classes.slice(1), [classes]);
+  const currentClasses = useMemo(() => classes.filter(isCurrentClass), [classes]);
+  const pastClasses = useMemo(() => classes.filter(isPastClass), [classes]);
 
   async function openDetail(c: ClassItem) {
     setDetailError("");
     setDetailLoading(true);
 
     try {
-      // GET /api/classes/{classId}
       const res = await classService.getClassById(c.id);
-      const mapped = mapToClassItem(res);
-      setDetailClass(mapped);
+      setDetailClass(mapToClassItem(res));
       setDetailOpen(true);
     } catch (e: any) {
       setDetailError(e?.message ?? "Không lấy được chi tiết lớp.");
-      // vẫn mở modal để show lỗi (nhưng giữ UX gọn)
       setDetailClass(c);
       setDetailOpen(true);
     } finally {
@@ -149,7 +103,7 @@ export default function MyClassesPage() {
 
   function goManageStudents(classId: string) {
     try {
-      localStorage.setItem(SELECTED_CLASS_ID_KEY, classId); // ✅ bấm lớp nào lưu lớp đó
+      localStorage.setItem(SELECTED_CLASS_ID_KEY, classId); // ✅ lưu lớp được chọn
     } catch {}
     router.push("/main/student");
   }
@@ -157,125 +111,43 @@ export default function MyClassesPage() {
   return (
     <main className="min-h-screen bg-gray-100">
       <div className="max-w-6xl mx-auto px-6 py-8">
-        {/* TABLE */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4">
-            <div className="text-sm font-semibold text-gray-900">Lớp của tôi</div>
-            <div className="text-xs text-gray-500 mt-1">Quản lý và theo dõi các lớp học của bạn</div>
-          </div>
-
-          {/* status banners (không phá layout) */}
-          {error ? (
-            <div className="mx-6 mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-              {error}
-            </div>
-          ) : null}
-
-          {loading ? (
-            <div className="mx-6 mb-4 text-sm text-gray-500">Đang tải danh sách lớp...</div>
-          ) : null}
-
-          {!loading && !error && classes.length === 0 ? (
-            <div className="mx-6 mb-6 text-sm text-gray-500">Chưa có lớp nào.</div>
-          ) : null}
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500 text-xs">
-                <tr>
-                  <th className="text-left px-6 py-3 font-medium">Tên lớp</th>
-                  <th className="text-left px-6 py-3 font-medium">Khối lớp</th>
-                  <th className="text-left px-6 py-3 font-medium">Phòng học</th>
-                  <th className="text-left px-6 py-3 font-medium">Năm học</th>
-                  <th className="text-left px-6 py-3 font-medium">Sĩ số</th>
-                  <th className="text-left px-6 py-3 font-medium">Hành động</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-gray-100">
-                {/* CURRENT CLASS */}
-                {currentClass && (
-                  <tr className="bg-emerald-50/60">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PRIMARY }} />
-                        <span className="font-semibold text-gray-900">{currentClass.name}</span>
-                        <span
-                          className="ml-2 text-[11px] font-semibold px-2.5 py-1 rounded-full"
-                          style={{ backgroundColor: `${PRIMARY}22`, color: PRIMARY }}
-                        >
-                          Hiện tại
-                        </span>
-                      </div>
-                      {currentClass.classDescription && (
-                        <div className="text-xs text-gray-500 mt-1">{currentClass.classDescription}</div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 font-medium">{currentClass.gradeLabel}</td>
-                    <td className="px-6 py-4 font-medium">{currentClass.roomName}</td>
-                    <td className="px-6 py-4 font-medium">
-                      {ymRange(currentClass.startDate, currentClass.endDate)}
-                    </td>
-                    <td className="px-6 py-4 font-medium">
-                      {currentClass.currentStudentCount}/{currentClass.maxCapacity}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => openDetail(currentClass)}
-                          className="h-9 px-4 rounded-lg text-xs text-white font-medium"
-                          style={{ backgroundColor: PRIMARY }}
-                        >
-                          Chi tiết
-                        </button>
-                        <button
-                          onClick={() => goManageStudents(currentClass.id)}
-                          className="h-9 px-4 rounded-lg text-xs font-medium border"
-                          style={{ borderColor: PRIMARY, color: PRIMARY }}
-                        >
-                          Quản lý
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-
-                {/* OTHER CLASSES */}
-                {otherClasses.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 font-medium text-gray-900">{c.name}</td>
-                    <td className="px-6 py-4">{c.gradeLabel}</td>
-                    <td className="px-6 py-4">{c.roomName}</td>
-                    <td className="px-6 py-4">{ymRange(c.startDate, c.endDate)}</td>
-                    <td className="px-6 py-4">
-                      {c.currentStudentCount}/{c.maxCapacity}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => openDetail(c)}
-                          className="h-9 px-4 rounded-lg text-xs text-white font-medium"
-                          style={{ backgroundColor: PRIMARY }}
-                        >
-                          Chi tiết
-                        </button>
-                        <button
-                          onClick={() => goManageStudents(c.id)}
-                          className="h-9 px-4 rounded-lg text-xs font-medium border"
-                          style={{ borderColor: PRIMARY, color: PRIMARY }}
-                        >
-                          Quản lý
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        {/* Header */}
+        <div className="mb-7">
+          <div className="text-2xl font-semibold text-gray-900">Lớp của tôi</div>
         </div>
 
-        {/* DETAIL MODAL */}
+        {error ? (
+          <div className="mb-5 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            {error}
+          </div>
+        ) : null}
+
+        {loading ? <div className="mb-5 text-sm text-gray-500">Đang tải danh sách lớp...</div> : null}
+
+        {/* ===== TABLE 1: CURRENT ===== */}
+        <SectionCard
+          title="Lớp hiện tại"
+          subtitle="Các lớp bạn đang dạy"
+          emptyText={!loading && !error && currentClasses.length === 0 ? "Chưa có lớp hiện tại." : ""}
+        >
+          <ClassesTable
+            rows={currentClasses}
+            highlightCurrent
+            onDetail={openDetail}
+            onManage={goManageStudents}
+          />
+        </SectionCard>
+
+        {/* ===== TABLE 2: PAST ===== */}
+        <SectionCard
+          title="Lớp đã từng dạy"
+          subtitle="Các lớp trong quá khứ"
+          emptyText={!loading && !error && pastClasses.length === 0 ? "Chưa có lớp quá khứ." : ""}
+          className="mt-6"
+        >
+          <ClassesTable rows={pastClasses} onDetail={openDetail} onManage={goManageStudents} />
+        </SectionCard>
+
         <ClassDetailModal
           open={detailOpen}
           onClose={closeDetail}
@@ -288,63 +160,114 @@ export default function MyClassesPage() {
   );
 }
 
-/* ================= MODAL ================= */
+/* ================= UI PARTS ================= */
 
-function ClassDetailModal({
-  open,
-  onClose,
-  data,
-  loading,
-  error,
+function SectionCard({
+  title,
+  subtitle,
+  emptyText,
+  className,
+  children,
 }: {
-  open: boolean;
-  onClose: () => void;
-  data: ClassItem | null;
-  loading: boolean;
-  error: string;
+  title: string;
+  subtitle: string;
+  emptyText?: string;
+  className?: string;
+  children: React.ReactNode;
 }) {
-  if (!open || !data) return null;
+  return (
+    <div className={`bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden ${className ?? ""}`}>
+      <div className="px-6 py-4">
+        <div className="text-lg font-semibold text-gray-900">{title}</div>
+        <div className="text-sm text-gray-500 mt-1">{subtitle}</div>
+      </div>
+
+      {emptyText ? <div className="px-6 pb-6 text-sm text-gray-500">{emptyText}</div> : null}
+
+      {children}
+    </div>
+  );
+}
+
+function ClassesTable({
+  rows,
+  onDetail,
+  onManage,
+  highlightCurrent,
+}: {
+  rows: ClassItem[];
+  onDetail: (c: ClassItem) => void;
+  onManage: (classId: string) => void;
+  highlightCurrent?: boolean;
+}) {
+  if (!rows.length) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="bg-white w-full max-w-xl rounded-2xl p-6">
-        <div className="font-semibold text-gray-900 mb-2">Chi tiết lớp học</div>
+    <div className="overflow-x-auto">
+      {/* ✅ tbody content text-sm, thead bigger */}
+      <table className="w-full">
+        <thead className="bg-gray-50 text-gray-600">
+          <tr>
+            <th className="text-left px-6 py-3 font-semibold text-sm md:text-base">Tên lớp</th>
+            <th className="text-left px-6 py-3 font-semibold text-sm md:text-base">Khối</th>
+            <th className="text-left px-6 py-3 font-semibold text-sm md:text-base">Phòng</th>
+            <th className="text-left px-6 py-3 font-semibold text-sm md:text-base">Năm học</th>
+            <th className="text-left px-6 py-3 font-semibold text-sm md:text-base">Sĩ số</th>
+            <th className="text-left px-6 py-3 font-semibold text-sm md:text-base">Hành động</th>
+          </tr>
+        </thead>
 
-        {loading ? <div className="text-sm text-gray-500 mb-3">Đang tải chi tiết...</div> : null}
+        <tbody className="divide-y divide-gray-100 text-sm text-gray-800">
+          {rows.map((c, idx) => {
+            const isFirst = idx === 0 && highlightCurrent;
+            return (
+              <tr key={c.id} className={isFirst ? "bg-emerald-50/60" : "hover:bg-gray-50"}>
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-2">
+                    {isFirst ? <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PRIMARY }} /> : null}
+                    <span className="font-semibold text-gray-900">{c.name}</span>
+                    {isFirst ? (
+                      <span
+                        className="ml-2 text-[11px] font-semibold px-2.5 py-1 rounded-full"
+                        style={{ backgroundColor: `${PRIMARY}22`, color: PRIMARY }}
+                      >
+                        Hiện tại
+                      </span>
+                    ) : null}
+                  </div>
 
-        {error ? (
-          <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-            {error}
-          </div>
-        ) : null}
+                  {c.classDescription ? <div className="text-xs text-gray-500 mt-1">{c.classDescription}</div> : null}
+                </td>
 
-        <div className="text-sm text-gray-600 space-y-2">
-          <div>
-            <b>Tên lớp:</b> {data.name}
-          </div>
-          <div>
-            <b>Khối:</b> {data.gradeLabel}
-          </div>
-          <div>
-            <b>Năm học:</b> {ymRange(data.startDate, data.endDate)}
-          </div>
-          <div>
-            <b>Phòng học:</b> {data.roomName}
-          </div>
-          <div>
-            <b>Sĩ số:</b> {data.currentStudentCount}/{data.maxCapacity}
-          </div>
-          <div>
-            <b>Mô tả:</b> {data.classDescription || "-"}
-          </div>
-        </div>
-
-        <div className="mt-6 flex justify-end">
-          <button onClick={onClose} className="h-10 px-5 rounded-lg border text-sm">
-            Đóng
-          </button>
-        </div>
-      </div>
+                <td className="px-6 py-4">{c.gradeLabel}</td>
+                <td className="px-6 py-4">{c.roomName}</td>
+                <td className="px-6 py-4">{ymRange(c.startDate, c.endDate)}</td>
+                <td className="px-6 py-4">
+                  {c.currentStudentCount}/{c.maxCapacity}
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onDetail(c)}
+                      className="h-9 px-4 rounded-lg text-xs text-white font-medium"
+                      style={{ backgroundColor: PRIMARY }}
+                    >
+                      Chi tiết
+                    </button>
+                    <button
+                      onClick={() => onManage(c.id)}
+                      className="h-9 px-4 rounded-lg text-xs font-medium border"
+                      style={{ borderColor: PRIMARY, color: PRIMARY }}
+                    >
+                      Quản lý
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

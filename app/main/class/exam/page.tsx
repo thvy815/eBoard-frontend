@@ -53,10 +53,6 @@ export default function ExamPage() {
     return true;
   });
 
-  useEffect(() => {
-    examService.getExamSchedules().then(setData);
-  }, []);
-
   return (
     <div className="space-y-6">
       {/* Title */}

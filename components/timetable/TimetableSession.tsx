@@ -36,7 +36,7 @@ export default function TimetableSession({
 }: Props) {
   return (
     <div className="space-y-4">
-      <h4 className="font-semibold text-xl">{title}</h4>
+      <h4 className="font-semibold text-lg">{title}</h4>
 
       <div className="grid grid-cols-[140px_repeat(5,1fr)] gap-4">
         {/* empty corner */}
@@ -82,13 +82,16 @@ export default function TimetableSession({
                 return (
                   <div
                     key={day.value}
-                    className="
+                    className="group
                       min-h-[96px]
                       rounded-2xl
                       border
                       border-gray-200
                       bg-white
                       cursor-pointer
+                      transition
+                    hover:border-green-300
+                    hover:bg-green-50
                     "
                     onClick={() => {
                       if (!lesson) onAdd(day.value, period);
@@ -101,8 +104,16 @@ export default function TimetableSession({
                         onDelete={() => onDelete(lesson)}
                       />
                     ) : (
-                      <div className="h-full flex items-center justify-center text-xs text-gray-300 italic">
-                        Trống
+                      <div className="h-full flex items-center justify-center">
+                        {/* mặc định */}
+                        <span className="text-xs text-gray-300 italic group-hover:hidden">
+                          Trống
+                        </span>
+
+                        {/* hover */}
+                        <span className="hidden group-hover:flex items-center gap-1 text-sm font-medium text-green-700">
+                          + Thêm tiết học
+                        </span>
                       </div>
                     )}
                   </div>

@@ -117,11 +117,7 @@ export default function AttendancePage() {
       x => x.status === "Vắng không phép"
     );
 
-    await attendanceService.notifyAbsentParents({
-      classId,
-      date,
-      studentIds: absent.map(x => x.studentId),
-    });
+    await attendanceService.notifyAbsenceWithoutExcuse(classId, date);
 
     alert("Đã gửi thông báo đến phụ huynh");
   };

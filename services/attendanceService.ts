@@ -43,12 +43,14 @@ export const attendanceService = {
     await api.patch(`/attendance/${attendanceId}`, dto);
   },
 
-  /* ===== NOTIFY ABSENT (TEMP) ===== */
-  async notifyAbsentParents(dto: {
-    classId: string;
-    date: string;
-    studentIds: string[];
-  }): Promise<void> {
-    await api.post("/attendance/notify-absent", dto);
+  /* ===== NOTIFY ABSENCE WITHOUT EXCUSE ===== */
+  async notifyAbsenceWithoutExcuse(
+    classId: string,
+    date: string
+  ): Promise<void> {
+    await api.post(
+      `/attendance/class/${classId}/notify-absence-without-excuse/${date}`
+    );
   }
+
 };

@@ -2,14 +2,18 @@
 
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
+
 import Button from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import Input from "@/components/ui/inputType/Input";
+
 import { teacherService } from "@/services/teacherService";
-import { TeacherInfo } from "@/types/teacher";
+import { tokenStorage } from "@/services/tokenStorage";
+import { decodeJwt } from "@/utils/jwt";
+
+import type { TeacherInfo } from "@/types/teacher";
 
 const PRIMARY = "#518581";
-const MOCK_TEACHER_ID = "0ae25138-f3ca-43a4-aa36-d485f2e5f323";
 
 type TeacherForm = {
   fullName: string;
@@ -28,7 +32,11 @@ function normalizeTeacherForm(x: any): TeacherForm {
 }
 
 // chỉ merge những field user đã sửa (dirty)
-function buildMergedPayload(original: TeacherForm, current: TeacherForm, dirty: Record<keyof TeacherForm, boolean>) {
+function buildMergedPayload(
+  original: TeacherForm,
+  current: TeacherForm,
+  dirty: Record<keyof TeacherForm, boolean>
+) {
   const payload: TeacherForm = { ...original };
   (Object.keys(dirty) as (keyof TeacherForm)[]).forEach((k) => {
     if (dirty[k]) payload[k] = current[k]; // chỉ field nào sửa mới lấy form hiện tại
@@ -36,8 +44,26 @@ function buildMergedPayload(original: TeacherForm, current: TeacherForm, dirty: 
   return payload;
 }
 
+function extractTeacherIdFromAccessToken(): string | null {
+  const token = tokenStorage.getAccessToken();
+  if (!token) return null;
+
+  try {
+    const payload: any = decodeJwt(token);
+    const id =
+      payload?.id ||
+      payload?.sub ||
+      payload?.teacherId ||
+      payload?.["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"];
+
+    return typeof id === "string" && id.trim() ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function SettingsPage() {
-  const teacherId = MOCK_TEACHER_ID;
+  const [teacherId, setTeacherId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -66,7 +92,21 @@ export default function SettingsPage() {
     qualifications: false,
   });
 
+  // ✅ lấy teacherId từ JWT (đăng nhập)
   useEffect(() => {
+    const id = extractTeacherIdFromAccessToken();
+    if (!id) {
+      // chưa login -> về login
+      window.location.href = "/login";
+      return;
+    }
+    setTeacherId(id);
+  }, []);
+
+  // ✅ load teacher info theo teacherId
+  useEffect(() => {
+    if (!teacherId) return;
+
     let mounted = true;
     (async () => {
       try {
@@ -79,7 +119,12 @@ export default function SettingsPage() {
         if (!mounted) return;
         setOriginal(normalized);
         setForm(normalized);
-        setDirty({ fullName: false, email: false, phoneNumber: false, qualifications: false });
+        setDirty({
+          fullName: false,
+          email: false,
+          phoneNumber: false,
+          qualifications: false,
+        });
       } catch (e: any) {
         if (!mounted) return;
         setLoadError(e?.message ?? "Không tải được thông tin giáo viên.");
@@ -107,6 +152,7 @@ export default function SettingsPage() {
   async function handleSave() {
     if (!original) return;
     if (!canSave) return;
+    if (!teacherId) return;
 
     try {
       setSaving(true);
@@ -118,7 +164,12 @@ export default function SettingsPage() {
       // sau khi save OK -> cập nhật original + reset dirty
       setOriginal(payload);
       setForm(payload);
-      setDirty({ fullName: false, email: false, phoneNumber: false, qualifications: false });
+      setDirty({
+        fullName: false,
+        email: false,
+        phoneNumber: false,
+        qualifications: false,
+      });
       setEdit(false);
     } catch (e: any) {
       setSaveError(e?.message ?? "Lưu thông tin thất bại.");
@@ -130,7 +181,12 @@ export default function SettingsPage() {
   function handleCancelEdit() {
     if (!original) return;
     setForm(original);
-    setDirty({ fullName: false, email: false, phoneNumber: false, qualifications: false });
+    setDirty({
+      fullName: false,
+      email: false,
+      phoneNumber: false,
+      qualifications: false,
+    });
     setEdit(false);
     setSaveError("");
   }
@@ -149,11 +205,10 @@ export default function SettingsPage() {
           <div className="px-6 py-5 flex items-center justify-between">
             <div>
               <div className="text-lg font-semibold text-gray-900">Thông tin cá nhân</div>
-              <div className="text-sm text-gray-500 mt-1">TeacherId: {teacherId}</div>
             </div>
 
             {!edit ? (
-              <Button variant="outline" onClick={() => setEdit(true)} disabled={loading || !!loadError}>
+              <Button variant="outline" onClick={() => setEdit(true)} disabled={loading || !!loadError || !teacherId}>
                 Sửa
               </Button>
             ) : (
@@ -169,7 +224,6 @@ export default function SettingsPage() {
                 >
                   {saving ? "Đang lưu..." : "Lưu"}
                 </Button>
-
               </div>
             )}
           </div>
@@ -237,7 +291,7 @@ export default function SettingsPage() {
         <div className="mt-6 bg-white rounded-2xl border border-gray-200 shadow-sm">
           <div className="px-6 py-5">
             <div className="text-lg font-semibold text-gray-900">Bảo mật</div>
-            <div className="text-sm text-gray-500 mt-1">Đổi mật khẩu đăng nhập (sẽ nối API sau)</div>
+            <div className="text-sm text-gray-500 mt-1">Đổi mật khẩu đăng nhập</div>
           </div>
 
           <div className="px-6 pb-6">
@@ -256,7 +310,7 @@ export default function SettingsPage() {
 
             <div className="mt-5">
               <Button variant="outline" disabled>
-                Lưu mật khẩu (coming soon)
+                Lưu mật khẩu 
               </Button>
             </div>
           </div>

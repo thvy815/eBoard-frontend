@@ -1,35 +1,31 @@
-// src/services/auth.service.ts
 import api from "@/lib/api";
-
-export type LoginResponseDto = {
-  accessToken: string;
-  refreshToken: string;
-};
-
-export type ParentLoginDto = {
-  email: string;
-  password: string;
-};
-
-export type TeacherLoginDto = {
-  email: string;
-  password: string;
-};
+import type {
+  ForgotPasswordRequest,
+  ResetPasswordRequest,
+  LoginResponseDto,
+  RegisterTeacherRequest,
+  TeacherLoginRequest,
+} from "@/types/auth";
 
 export const authService = {
-  async parentLogin(dto: ParentLoginDto): Promise<LoginResponseDto> {
-    const res = await api.post<LoginResponseDto>(
-      "/auth/parent/login",
-      dto
-    );
+  async teacherLogin(payload: TeacherLoginRequest): Promise<LoginResponseDto> {
+    const res = await api.post("/auth/teacher/login", payload);
     return res.data;
   },
 
-  async teacherLogin(dto: TeacherLoginDto): Promise<LoginResponseDto> {
-    const res = await api.post<LoginResponseDto>(
-      "/auth/teacher/login",
-      dto
-    );
+  async registerTeacher(payload: RegisterTeacherRequest): Promise<void> {
+    await api.post("/auth/teacher/register", payload);
+  },
+
+  async forgotPassword(payload: ForgotPasswordRequest): Promise<string> {
+    const res = await api.post("/auth/forgot-password", payload);
+    // BE trả string message
+    return res.data;
+  },
+
+  // ✅ BE chỉ cần token + newPassword + confirmPassword
+  async resetPassword(payload: ResetPasswordRequest): Promise<string> {
+    const res = await api.post("/auth/reset-password", payload);
     return res.data;
   },
 };

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
+import { authService } from "@/services/authService";
 
 const PRIMARY = "#518581";
 
@@ -10,13 +11,30 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setErrorMsg("");
 
-    if (!email.trim()) return;
+    if (!email.trim()) {
+      setErrorMsg("Vui lòng nhập email.");
+      return;
+    }
 
-    // TODO: call API send reset link here
-    setSubmitted(true);
+    try {
+      setIsLoading(true);
+
+      await authService.forgotPassword({ email: email.trim() });
+
+      // ✅ luôn show message như BE: "Nếu email tồn tại..."
+      setSubmitted(true);
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? "Gửi mail thất bại. Vui lòng thử lại.");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -33,11 +51,18 @@ export default function ForgotPasswordPage() {
 
           <h1 className="text-sm font-semibold text-gray-900">Quên mật khẩu?</h1>
           <p className="text-xs text-gray-500 mt-1">
-            Nhập email của bạn để nhận link khôi phục mật khẩu
+            Nhập email để nhận link đặt lại mật khẩu
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Error */}
+          {errorMsg ? (
+            <div className="text-xs rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+              {errorMsg}
+            </div>
+          ) : null}
+
           {/* Email */}
           <div>
             <label className="text-sm text-gray-800">
@@ -52,23 +77,29 @@ export default function ForgotPasswordPage() {
                 "border-gray-200"
               )}
               style={{ ["--tw-ring-color" as any]: `${PRIMARY}33` }}
+              disabled={isLoading}
+              autoComplete="email"
             />
           </div>
 
-          {/* Success message (optional) */}
+          {/* Success message */}
           {submitted && (
             <div className="text-xs rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-emerald-800">
-              Nếu email tồn tại trong hệ thống, link khôi phục đã được gửi. Vui lòng kiểm tra hộp thư.
+              Nếu email tồn tại trong hệ thống, link đặt lại mật khẩu đã được gửi.
+              Vui lòng kiểm tra hộp thư (cả Spam). Link có thể có thời hạn.
             </div>
           )}
 
-          {/* Submit */}
           <button
             type="submit"
-            className="w-full h-12 rounded-lg text-white font-medium transition"
+            className={clsx(
+              "w-full h-12 rounded-lg text-white font-medium transition",
+              isLoading ? "opacity-70 cursor-not-allowed" : "hover:opacity-95"
+            )}
             style={{ backgroundColor: PRIMARY }}
+            disabled={isLoading}
           >
-            Gửi link khôi phục
+            {isLoading ? "Đang gửi..." : "Gửi email đặt lại mật khẩu"}
           </button>
 
           {/* Back to login */}
@@ -93,18 +124,8 @@ export default function ForgotPasswordPage() {
 function MailIcon() {
   return (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="text-white">
-      <path
-        d="M4 6h16v12H4V6Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="m4 7 8 6 8-6"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
+      <path d="M4 6h16v12H4V6Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path d="m4 7 8 6 8-6" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
     </svg>
   );
 }

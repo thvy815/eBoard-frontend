@@ -16,10 +16,11 @@ import { PlusIcon, CheckIcon } from "@/components/ui/icon";
 import type { CreateClassForm, CreatedClass, Option } from "@/types/Class";
 import { compareYYYYMM, isValidMonth, isValidYear, toFirstDayISO } from "@/utils/classDate";
 
+import { tokenStorage } from "@/services/tokenStorage";
+import { decodeJwt } from "@/utils/jwt";
+
 const PRIMARY = "#518581";
 const SELECTED_CLASS_ID_KEY = "selectedClassId";
-const CURRENT_TEACHER_ID_KEY = "teacherId"; // giữ lại, nhưng hiện tại mock
-const MOCK_TEACHER_ID = "0ae25138-f3ca-43a4-aa36-d485f2e5f323";
 
 const initialForm: CreateClassForm = {
   name: "",
@@ -32,6 +33,25 @@ const initialForm: CreateClassForm = {
   maxCapacity: "",
   classDescription: "",
 };
+
+function extractTeacherIdFromAccessToken(): string | null {
+  const token = tokenStorage.getAccessToken();
+  if (!token) return null;
+
+  try {
+    const payload: any = decodeJwt(token);
+
+    const id =
+      payload?.id ||
+      payload?.sub ||
+      payload?.teacherId ||
+      payload?.["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"];
+
+    return typeof id === "string" && id.trim() ? id : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function CreateClassPage() {
   const router = useRouter();
@@ -49,6 +69,20 @@ export default function CreateClassPage() {
   // create state
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState("");
+
+  // ✅ teacherId từ token đăng nhập
+  const [teacherId, setTeacherId] = useState<string | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    const id = extractTeacherIdFromAccessToken();
+    if (!id) {
+      router.replace("/login");
+      return;
+    }
+    setTeacherId(id);
+    setCheckingAuth(false);
+  }, [router]);
 
   useEffect(() => {
     let mounted = true;
@@ -92,15 +126,6 @@ export default function CreateClassPage() {
     } catch {}
   }
 
-  function getTeacherId() {
-    // hiện tại chưa login => mock cứng
-    try {
-      return localStorage.getItem(CURRENT_TEACHER_ID_KEY) || MOCK_TEACHER_ID;
-    } catch {
-      return MOCK_TEACHER_ID;
-    }
-  }
-
   function fakeGuid() {
     // tạm tạo id để UI hoạt động (vì BE đang không trả id)
     return `cls_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -126,7 +151,11 @@ export default function CreateClassPage() {
     if (!validate()) return;
 
     setCreateError("");
-    const teacherId = getTeacherId();
+
+    if (!teacherId) {
+      router.replace("/login");
+      return;
+    }
 
     const payload = {
       name: form.name.trim(),
@@ -173,6 +202,10 @@ export default function CreateClassPage() {
     if (createdClass?.id) saveSelectedClassId(createdClass.id);
     router.push("/main/class");
   }
+
+  // ✅ đang check auth thì đừng render để tránh flash
+  if (checkingAuth) return null;
+  if (!teacherId) return null;
 
   return (
     <div className="w-full">

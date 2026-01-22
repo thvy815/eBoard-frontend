@@ -10,16 +10,27 @@ import { mapToClassItem } from "@/utils/classMapper";
 import { isCurrentClass, isPastClass } from "@/utils/classStatus";
 import ClassDetailModal from "@/components/class/ClassDetailModal";
 
+import { tokenStorage } from "@/services/tokenStorage";
+import { decodeJwt } from "@/utils/jwt";
+
 const PRIMARY = "#518581";
 const SELECTED_CLASS_ID_KEY = "selectedClassId";
-const CURRENT_TEACHER_ID_KEY = "teacherId";
-const MOCK_TEACHER_ID = "0ae25138-f3ca-43a4-aa36-d485f2e5f323";
 
-function getTeacherId() {
+function extractTeacherIdFromAccessToken(): string | null {
+  const token = tokenStorage.getAccessToken();
+  if (!token) return null;
+
   try {
-    return localStorage.getItem(CURRENT_TEACHER_ID_KEY) || MOCK_TEACHER_ID;
+    const payload: any = decodeJwt(token);
+    const id =
+      payload?.id ||
+      payload?.sub ||
+      payload?.teacherId ||
+      payload?.["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"];
+
+    return typeof id === "string" && id.trim() ? id : null;
   } catch {
-    return MOCK_TEACHER_ID;
+    return null;
   }
 }
 
@@ -47,9 +58,14 @@ export default function MyClassesPage() {
         setLoading(true);
         setError("");
 
-        const teacherId = getTeacherId();
+        // lấy teacherId từ token đăng nhập
+        const teacherId = extractTeacherIdFromAccessToken();
+        if (!teacherId) {
+          router.replace("/login");
+          return;
+        }
 
-        // ✅ API mới: /api/classes?teacherId=...&pageNumber=...&pageSize=...
+        // API mới: /api/classes?teacherId=...&pageNumber=...&pageSize=...
         const res: ClassesPagedResponse<any> = await classService.getAllClassesByTeacher(
           teacherId,
           pageNumber,
@@ -73,7 +89,7 @@ export default function MyClassesPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [router]);
 
   const currentClasses = useMemo(() => classes.filter(isCurrentClass), [classes]);
   const pastClasses = useMemo(() => classes.filter(isPastClass), [classes]);
@@ -103,9 +119,9 @@ export default function MyClassesPage() {
 
   function goManageStudents(classId: string) {
     try {
-      localStorage.setItem(SELECTED_CLASS_ID_KEY, classId); // ✅ lưu lớp được chọn
+      localStorage.setItem(SELECTED_CLASS_ID_KEY, classId); // lưu lớp được chọn
     } catch {}
-    router.push("/main/student");
+    router.push("/main/class/attendance");
   }
 
   return (

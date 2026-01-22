@@ -10,6 +10,7 @@ import {
   Sparkles,
   AlertCircle,
   Settings,
+  ClipboardList
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -37,9 +38,16 @@ export default function Sidebar() {
           active={pathname === "/main/create-class"}
         />
         <SidebarItem
-          href="/main/class"
+          href="/main/my-classes"
           label="Lớp của tôi"
           icon={<BookOpen />}
+          active={pathname === "/main/my-classes"}
+        />
+
+        <SidebarItem
+          href="/main/class/attendance"
+          label="Quản lý lớp"
+          icon={<ClipboardList />}
           active={pathname.startsWith("/main/class")}
         />
         <SidebarItem

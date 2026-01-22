@@ -31,6 +31,20 @@ export default function AttendancePage() {
 
   const [activeTab, setActiveTab] = useState<TabType>("pending");
   const [requests, setRequests] = useState<any[]>([]);
+  const [pickupPeople, setPickupPeople] = useState<string[]>([]);
+  const STATUS_OPTIONS = [
+    "Có mặt",
+    "Vắng có phép",
+    "Vắng không phép",
+  ] as const;
+
+  type AttendanceStatus = typeof STATUS_OPTIONS[number];
+
+  const toAttendanceStatus = (v?: string) =>
+    STATUS_OPTIONS.includes(v as AttendanceStatus)
+      ? (v as AttendanceStatus)
+      : undefined;
+
 
   const loadPendingRequests = async () => {
     setLoadingRequests(true);
@@ -100,11 +114,26 @@ export default function AttendancePage() {
       setData(res);
       setEditing(structuredClone(res.attendances));
       setNotCreated(false);
+
+      if (res.attendances.length > 0) {
+        await loadPickupPeople(res.attendances[0].studentId);
+      }
     } catch {
       setNotCreated(true);
       setData(null);
     }
   };
+
+  const loadPickupPeople = async (studentId: string) => {
+    try {
+      const list = await attendanceService.getRecentPickupPeople(studentId);
+      setPickupPeople(list);
+    } catch {
+      setPickupPeople([]);
+    }
+  };
+
+
 
   useEffect(() => {
     load();
@@ -128,35 +157,39 @@ export default function AttendancePage() {
 
     setSaveSuccess(false);
 
-    const normalize = (v?: string) => (v ?? "").trim();
-
     const changed = editing.filter(e => {
       const o = data.attendances.find(x => x.id === e.id);
       if (!o) return true;
 
-      return (
-        normalize(o.status) !== normalize(e.status) ||
-        normalize(o.absenceReason) !== normalize(e.absenceReason) ||
-        normalize(o.pickupPerson) !== normalize(e.pickupPerson) ||
-        normalize(o.notes) !== normalize(e.notes)
-      );
+      return JSON.stringify({
+        status: o.status ?? "",
+        absenceReason: o.absenceReason ?? "",
+        pickupPerson: o.pickupPerson ?? "",
+        notes: o.notes ?? "",
+      }) !== JSON.stringify({
+        status: e.status ?? "",
+        absenceReason: e.absenceReason ?? "",
+        pickupPerson: e.pickupPerson ?? "",
+        notes: e.notes ?? "",
+      });
     });
 
-    for (const a of changed) {
-      await attendanceService.patchAttendance(a.id, {
-        status: a.status,
-        absenceReason: a.absenceReason,
-        pickupPerson: a.pickupPerson,
-        notes: a.notes,
-      });
-    }
+    console.log("PATCH LIST:", changed);
+
+    await Promise.all(
+      changed.map(a =>
+        attendanceService.patchAttendance(a.id, {
+          status: a.status,
+          absenceReason: a.absenceReason || undefined,
+          pickupPerson: a.pickupPerson || undefined,
+          notes: a.notes || undefined,
+        })
+      )
+    );
 
     await load();
 
-    // ✅ báo thành công
     setSaveSuccess(true);
-
-    // tự ẩn sau 3s
     setTimeout(() => setSaveSuccess(false), 3000);
   };
 
@@ -255,7 +288,7 @@ export default function AttendancePage() {
           <AttendanceTable
             data={editing}
             date={date}
-            pickupPeople={PICKUP_PEOPLE}
+            pickupPeople={pickupPeople}
             onChange={setEditing}
           />
         </>

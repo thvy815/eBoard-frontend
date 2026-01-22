@@ -31,18 +31,11 @@ export const attendanceService = {
     };
   },
 
-  async patchAttendance(
-    attendanceId: string,
-    dto: PatchAttendanceDto
-  ): Promise<void> {
-    if (!attendanceId || attendanceId.startsWith("00000000")) {
-      console.warn("❌ Invalid attendanceId, skip PATCH");
-      return;
-    }
+  async patchAttendance(attendanceId: string, dto: PatchAttendanceDto) {
+  console.log("PATCH →", attendanceId, dto);
 
-    await api.patch(`/attendance/${attendanceId}`, dto);
-  },
-
+  await api.patch(`/attendance/${attendanceId}`, dto);
+},
   /* ===== NOTIFY ABSENCE WITHOUT EXCUSE ===== */
   async notifyAbsenceWithoutExcuse(
     classId: string,
@@ -83,5 +76,11 @@ async getRejectedAbsentRequests(classId: string, page = 1, size = 50) {
   return res.data;
 },
 
+async getRecentPickupPeople(studentId: string): Promise<string[]> {
+  const res = await api.get(
+    `/attendance/student/${studentId}/recent-pickup-persons`
+  );
 
+  return res.data;
+}
 };

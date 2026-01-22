@@ -43,10 +43,10 @@ export default function ScoreDetailTable({
           ))}
         </tbody>
       </table>
-
       {/* ===== SUMMARY ===== */}
       <div className="border-t bg-[#f3f8f6] px-6 py-4">
         <div className="flex justify-end gap-12 text-sm text-gray-600">
+
           {/* Rank */}
           <div className="text-center">
             <div className="text-xs">Xếp hạng</div>
@@ -59,7 +59,7 @@ export default function ScoreDetailTable({
           <div className="text-center">
             <div className="text-xs">Điểm trung bình chung</div>
             <div className="text-lg font-semibold text-gray-900">
-              {summary?.averageScore?.toFixed(2)}
+              {summary?.averageScore?.toFixed(2) ?? "-"}
             </div>
           </div>
 
@@ -67,11 +67,29 @@ export default function ScoreDetailTable({
           <div className="text-center">
             <div className="text-xs">Xếp loại học lực</div>
             <div className="text-lg font-semibold text-[#518581]">
-              {summary?.grade}
+              {summary?.grade ?? "-"}
+            </div>
+          </div>
+
+          {/* Conduct */}
+          <div className="text-center">
+            <div className="text-xs">Hạnh kiểm</div>
+            <div
+              className={`text-lg font-semibold ${
+                summary?.conduct === "Tốt"
+                  ? "text-green-600"
+                  : summary?.conduct === "Đạt"
+                  ? "text-yellow-600"
+                  : summary?.conduct === "Cần cải thiện"
+                  ? "text-red-600"
+                  : "text-gray-900"
+              }`}
+            >
+              {summary?.conduct ?? "-"}
             </div>
           </div>
         </div>
       </div>
-    </div>
+</div>
   );
 }

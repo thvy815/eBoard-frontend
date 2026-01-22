@@ -7,6 +7,11 @@ export type Grade =
   | "Trung bình"
   | "Yếu";
 
+export type Conduct =
+  | "Tốt"
+  | "Đạt"
+  | "Cần cải thiện";
+
 /* ================= THỐNG KÊ LỚP ================= */
 
 /**
@@ -17,16 +22,18 @@ export interface ScoreStat {
   label: Grade;
   value: number;
   type: "excellent" | "good" | "average" | "weak";
+  category?: "grade"; // giữ nguyên, không động logic
 }
 
 /**
  * Map từ StudentScoreSummaryDto
  */
 export interface StudentScore {
-  studentId: string;      // Guid
+  studentId: string; // Guid
   studentName: string;
   averageScore: number;
   grade: Grade;
+  conduct: Conduct; // ✅ thêm
 }
 
 /**
@@ -43,7 +50,7 @@ export interface ClassScoreSummary {
  * Map từ SubjectScoreDto
  */
 export interface SubjectScore {
-  subjectId: string;      // Guid
+  subjectId: string; // Guid
   subjectName: string;
   midTermScore: number | null;
   finalTermScore: number | null;
@@ -66,6 +73,7 @@ export interface StudentScoreSheet {
 
   averageScore: number;
   grade: Grade;
+  conduct: Conduct; // ✅ thêm
 
   subjectScores: SubjectScore[];
 }
@@ -76,6 +84,7 @@ export interface StudentScoreSheet {
 export interface ScoreDetailSummary {
   averageScore: number;
   grade: Grade;
+  conduct: Conduct; // ✅ thêm
   rank: number;
 }
 
@@ -103,7 +112,7 @@ export interface UpdateStudentScoreSheetPayload {
  * Map từ SubjectDto
  */
 export interface Subject {
-  id: string;     // Guid
+  id: string; // Guid
   name: string;
 }
 

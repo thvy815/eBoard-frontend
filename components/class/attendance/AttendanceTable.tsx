@@ -84,51 +84,56 @@ export default function AttendanceTable({
                     className="border rounded px-2 py-1 w-full"
                   />
                 </td>
-
                 <td className="p-3">
                   {isPresent && !isPastDate ? (
                     <>
-                      <select
-                        value={isOtherPickup ? "OTHER" : s.pickupPerson || ""}
-                        onChange={e => {
-                          const val = e.target.value;
+                      {(() => {
+                        const isCustomPickup =
+                          s.pickupPerson &&
+                          !pickupPeople.includes(s.pickupPerson);
 
-                          update(s.id, {
-                            pickupPerson: val === "OTHER" ? "" : val,
-                          });
-                        }}
-                        className="border rounded px-2 py-1 w-full"
-                      >
-                        <option value="">-- Chọn --</option>
+                        return (
+                          <>
+                            <select
+                              value={isCustomPickup ? "OTHER" : s.pickupPerson || ""}
+                              onChange={e => {
+                                const val = e.target.value;
 
-                        {pickupPeople.map(p => (
-                          <option key={p} value={p}>
-                            {p}
-                          </option>
-                        ))}
+                                if (val === "OTHER") {
+                                  update(s.id, { pickupPerson: "" });
+                                } else {
+                                  update(s.id, { pickupPerson: val });
+                                }
+                              }}
+                              className="border rounded px-2 py-1 w-full"
+                            >
+                              <option value="">-- Chọn --</option>
 
-                        <option value="OTHER">Khác</option>
-                      </select>
+                              {pickupPeople.map(p => (
+                                <option key={p} value={p}>{p}</option>
+                              ))}
 
-                      {/* TEXTBOX HIỆN KHI CHỌN KHÁC */}
-                      {isOtherPickup && (
-                        <input
-                          className="border mt-1 px-2 py-1 w-full"
-                          placeholder="Nhập tên người đưa đón"
-                          value={s.pickupPerson || ""}
-                          onChange={e =>
-                            update(s.id, {
-                              pickupPerson: e.target.value,
-                            })
-                          }
-                        />
-                      )}
+                              <option value="OTHER">Khác</option>
+                            </select>
+
+                            {(isCustomPickup || s.pickupPerson === "") && (
+                              <input
+                                className="border mt-1 px-2 py-1 w-full"
+                                placeholder="Nhập tên người đưa đón"
+                                value={s.pickupPerson || ""}
+                                onChange={e =>
+                                  update(s.id, { pickupPerson: e.target.value }) // ✅ lưu DB
+                                }
+                              />
+                            )}
+                          </>
+                        );
+                      })()}
                     </>
                   ) : (
                     <input disabled className="border w-full" />
                   )}
                 </td>
-
 
                 <td className="p-3">
                   <input

@@ -1,38 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/inputType/Input";
 import { X } from "lucide-react";
 import { StudentOptionDto } from "@/services/studentService";
-
-interface Student {
-  id: string;
-  fullName: string;
-  parentPhone: string;
-}
+import { activityService } from "@/services/activityService";
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  students: StudentOptionDto[]; 
-  onSubmit: (data: {
-    studentId: string;
-    note?: string;
-    comment?: string;
-    parentPhone: string;
-  }[]) => void;
+  students: StudentOptionDto[];
+  activityId: string;
+  onSuccess?: () => void; // reload parent if needed
 }
 
 export default function AddParticipantsModal({
   open,
   onClose,
   students,
-  onSubmit,
+  activityId,
+  onSuccess,
 }: Props) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [comment, setComment] = useState("");
+  const [loading, setLoading] = useState(false);
 
   if (!open) return null;
 
@@ -40,24 +33,49 @@ export default function AddParticipantsModal({
     selectedIds.includes(s.id)
   );
 
-  const handleSubmit = () => {
-    const payload = selectedStudents.map(s => ({
-      studentId: s.id,
-      parentPhone: "",
-      note,
-      comment,
-    }));
+  const handleSubmit = async () => {
+    if (selectedIds.length === 0) return;
 
-    onSubmit(payload);
-    onClose();
+    try {
+      setLoading(true);
+
+      const payload = selectedStudents.map(s => ({
+        studentId: s.id,
+        activityId,
+        parentPhoneNumber: "",
+        teacherComments: comment,
+        notes: note,
+      }));
+
+      await activityService.addParticipantsBatch(payload);
+
+      alert("✅ Đã thêm học sinh tham gia");
+
+      setSelectedIds([]);
+      setNote("");
+      setComment("");
+
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert("❌ Thêm thất bại");
+    } finally {
+      setLoading(false);
+    }
   };
+
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white w-[700px] max-h-[90vh] rounded-2xl shadow-lg overflow-hidden flex flex-col">
+
         {/* HEADER */}
         <div className="px-6 py-4 border-b flex justify-between items-center">
-          <h2 className="font-semibold text-lg">Thêm học sinh tham gia</h2>
+          <h2 className="font-semibold text-lg">
+            Thêm học sinh tham gia
+          </h2>
           <button onClick={onClose}>
             <X />
           </button>
@@ -65,7 +83,8 @@ export default function AddParticipantsModal({
 
         {/* BODY */}
         <div className="p-6 space-y-4 overflow-y-auto">
-          {/* CHỌN HỌC SINH */}
+
+          {/* SELECT STUDENTS */}
           <div>
             <label className="text-sm font-medium">
               Học sinh <span className="text-red-500">*</span>
@@ -80,7 +99,7 @@ export default function AddParticipantsModal({
                 )
               }
               className="
-                w-full rounded-xl border px-3 py-2 text-sm min-h-[120px]
+                w-full rounded-xl border px-3 py-2 text-sm min-h-[140px]
                 focus:outline-none focus:ring-2 focus:ring-[#518581]/40
               "
             >
@@ -96,26 +115,31 @@ export default function AddParticipantsModal({
             </p>
           </div>
 
-          {/* HIỂN THỊ SĐT TỰ ĐỘNG
+          {/* PREVIEW PHONE */}
           {selectedStudents.length > 0 && (
             <div className="bg-gray-50 rounded-xl p-3 text-sm">
-              <p className="font-medium mb-2">SĐT phụ huynh</p>
+              <p className="font-medium mb-2">
+                📱 SĐT phụ huynh
+              </p>
+
               <ul className="space-y-1">
                 {selectedStudents.map(s => (
-                  <li key={s.id} className="flex justify-between">
+                  <li
+                    key={s.id}
+                    className="flex justify-between text-gray-700"
+                  >
                     <span>{s.fullName}</span>
-                    <span className="font-medium">
-                      {s.parentPhone}
-                    </span>
                   </li>
                 ))}
               </ul>
             </div>
-          )} */}
+          )}
 
-          {/* NHẬN XÉT */}
+          {/* COMMENT */}
           <div>
-            <label className="text-sm font-medium">Nhận xét</label>
+            <label className="text-sm font-medium">
+              Nhận xét
+            </label>
             <Input
               placeholder="Nhận xét về học sinh"
               value={comment}
@@ -123,35 +147,41 @@ export default function AddParticipantsModal({
             />
           </div>
 
-          {/* GHI CHÚ */}
+          {/* NOTE */}
           <div>
-            <label className="text-sm font-medium">Ghi chú</label>
+            <label className="text-sm font-medium">
+              Ghi chú
+            </label>
             <Input
               placeholder="Ghi chú thêm"
               value={note}
               onChange={e => setNote(e.target.value)}
             />
           </div>
+
         </div>
 
         {/* FOOTER */}
         <div className="px-6 py-4 border-t flex gap-3">
+
           <Button
             variant="primary"
             className="flex-1 flex justify-center"
             onClick={handleSubmit}
-            disabled={selectedIds.length === 0}
+            disabled={selectedIds.length === 0 || loading}
           >
-            Thêm vào danh sách
+            {loading ? "Đang thêm..." : "Thêm vào danh sách"}
           </Button>
 
           <Button
             variant="outline"
             className="flex-1 flex justify-center"
             onClick={onClose}
+            disabled={loading}
           >
             Hủy
           </Button>
+
         </div>
       </div>
     </div>

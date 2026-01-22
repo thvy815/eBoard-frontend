@@ -89,33 +89,33 @@ export default function AttendanceTable({
                   {isPresent && !isPastDate ? (
                     <>
                       <select
-                        value={
-                          isOtherPickup ? "OTHER" : s.pickupPerson || ""
-                        }
-                        onChange={e =>
+                        value={isOtherPickup ? "OTHER" : s.pickupPerson || ""}
+                        onChange={e => {
+                          const val = e.target.value;
+
                           update(s.id, {
-                            pickupPerson:
-                              e.target.value === "OTHER"
-                                ? ""
-                                : e.target.value,
-                          })
-                        }
+                            pickupPerson: val === "OTHER" ? "" : val,
+                          });
+                        }}
                         className="border rounded px-2 py-1 w-full"
                       >
                         <option value="">-- Chọn --</option>
+
                         {pickupPeople.map(p => (
                           <option key={p} value={p}>
                             {p}
                           </option>
                         ))}
+
                         <option value="OTHER">Khác</option>
                       </select>
 
+                      {/* TEXTBOX HIỆN KHI CHỌN KHÁC */}
                       {isOtherPickup && (
                         <input
                           className="border mt-1 px-2 py-1 w-full"
                           placeholder="Nhập tên người đưa đón"
-                          value={s.pickupPerson}
+                          value={s.pickupPerson || ""}
                           onChange={e =>
                             update(s.id, {
                               pickupPerson: e.target.value,
@@ -128,6 +128,7 @@ export default function AttendanceTable({
                     <input disabled className="border w-full" />
                   )}
                 </td>
+
 
                 <td className="p-3">
                   <input

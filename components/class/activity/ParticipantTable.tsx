@@ -25,7 +25,8 @@ export default function ParticipantTable({
           <tr>
             <th className="p-4 text-left w-[60px]">STT</th>
             <th className="text-left">Họ và tên</th>
-            <th>SDT phụ huynh</th>
+            <th className="text-left">Nhận xét</th>
+            <th className="text-left">Ghi chú</th>
             <th className="text-center w-[120px]">Thao tác</th>
           </tr>
         </thead>
@@ -36,7 +37,7 @@ export default function ParticipantTable({
             data.map((p, idx) => (
               <tr
                 key={p.id}
-                className="border-t text-center hover:bg-gray-50 transition"
+                className="border-t hover:bg-gray-50 transition"
               >
                 <td className="p-4 text-left">{idx + 1}</td>
 
@@ -44,10 +45,18 @@ export default function ParticipantTable({
                   {p.studentName}
                 </td>
 
-                <td>{p.parentPhoneNumber}</td>
+                {/* NHẬN XÉT */}
+                <td className="text-left px-3">
+                  {p.teacherComments || "—"}
+                </td>
 
+                {/* GHI CHÚ */}
+                <td className="text-left px-3">
+                  {p.notes || "—"}
+                </td>
+
+                {/* ACTIONS */}
                 <td className="flex justify-center gap-2 py-2">
-                  {/* EDIT */}
                   <Button
                     icon={Pencil}
                     variant="ghost"
@@ -57,7 +66,6 @@ export default function ParticipantTable({
                     <span className="sr-only">Sửa</span>
                   </Button>
 
-                  {/* DELETE */}
                   <Button
                     icon={Trash2}
                     variant="ghost"
@@ -72,7 +80,7 @@ export default function ParticipantTable({
           ) : (
             <tr>
               <td
-                colSpan={4}
+                colSpan={5}
                 className="h-32 text-center text-gray-400 bg-gray-50"
               >
                 Chưa có học sinh tham gia

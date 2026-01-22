@@ -162,14 +162,14 @@ useEffect(() => {
         onSuccess={() => {}}
       />
 
-    <AddParticipantsModal
-        open={openAdd}
-        students={students}
-        onSubmit={(data) => {
-            console.log(data);
-        }}
-        onClose ={() => setOpenAdd(false)}  
-    />
+   <AddParticipantsModal
+    open={openAdd}
+    students={students}
+    activityId={activity.id} // ✅ thêm ID hoạt động
+    onClose={() => setOpenAdd(false)}
+    onSuccess={() => {}} // reload list nếu cần
+  />
+
     <EditParticipantModal
         open={!!editing}
         participant={editing}

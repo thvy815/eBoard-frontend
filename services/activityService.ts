@@ -103,4 +103,18 @@ export const activityService = {
       `/activities/${classId}/signins`
     ).then(res => res.data);
   },
+
+  async addParticipantsBatch(
+    payload: {
+      studentId: string;
+      activityId: string;
+      parentPhoneNumber?: string;
+      teacherComments?: string;
+      notes?: string;
+    }[]
+  ) {
+    return api.post("/activities/participants/batch", payload); // ✅ gửi ARRAY gốc
+  }
+
+
 };

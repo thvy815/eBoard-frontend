@@ -12,8 +12,6 @@ import TimetableSettingsModal from "@/components/timetable/TimetableSettingModal
 import { useTimetablePeriods } from "@/hooks/useTimetablePeriods";
 import { TimetableSettings } from "@/types/timetableSettings";
 
-const CLASS_ID = "04598b0c-3d9f-4519-8581-dadee7db189a";
-
 export default function TimetablePage() {
   const [data, setData] = useState<TimetableItem[]>([]);
   const [openAdd, setOpenAdd] = useState(false);
@@ -27,6 +25,13 @@ export default function TimetablePage() {
     isMorning?: boolean;
   }>();
 
+  const [classId, setClassId] = useState<string | null>(null);
+  // lấy classId từ localStorage (chỉ chạy ở client)
+  useEffect(() => {
+    const id = localStorage.getItem("selectedClassId");
+    setClassId(id);
+  }, []);
+
   const {
     morningPeriods,
     afternoonPeriods,
@@ -34,22 +39,37 @@ export default function TimetablePage() {
   } = useTimetablePeriods(settings);
 
   const fetchData = () => {
+    if (!classId) return;
     timetableService
-      .getByClassId(CLASS_ID)
+      .getByClassId(classId)
       .then(setData)
       .catch(console.error);
   };
   const fetchSettings = () => {
-  timetableService
-    .getSettings(CLASS_ID)
-    .then(setSettings)
-    .catch(console.error);
-};
+    if (!classId) return;
+    timetableService
+      .getSettings(classId)
+      .then(setSettings)
+      .catch(console.error);
+  };
 
   useEffect(() => {
+    if (!classId) return;
     fetchData();
     fetchSettings();
-  }, []);
+  }, [classId]);
+
+  // chưa chọn lớp thì hiện thông báo đơn giản
+  if (!classId) {
+    return (
+      <div className="p-6 bg-white rounded-3xl border shadow-sm">
+        <h2 className="text-lg font-semibold">Chưa chọn lớp</h2>
+        <p className="text-sm text-gray-400">
+          Vui lòng chọn lớp trước khi xem thời khóa biểu.
+        </p>
+      </div>
+    );
+  }
 
   // Xóa tiết học
   const handleDelete = async (item: TimetableItem) => {
@@ -106,7 +126,7 @@ export default function TimetablePage() {
 
       <AddTimetableModal
         open={openAdd}
-        classId={CLASS_ID}
+        classId={classId}
         prefill={prefill}
         onClose={() => {
           setOpenAdd(false);
@@ -116,7 +136,7 @@ export default function TimetablePage() {
       />
       <TimetableSettingsModal
         open={openSettings}
-        classId={CLASS_ID}
+        classId={classId}
         onClose={() => setOpenSettings(false)}
         onUpdated={() => {
           fetchSettings();
@@ -162,7 +182,7 @@ export default function TimetablePage() {
         <TimetableDetailModal
           open={openDetail}
           item={selectedItem}
-          classId={CLASS_ID}
+          classId={classId}
           onClose={() => {
             setOpenDetail(false);
             setSelectedItem(null);

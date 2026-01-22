@@ -54,7 +54,12 @@ export default function ViolationPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
 
-  const classId = "fc23fd72-6527-47ed-97c5-5e320060f457";
+  const classId = localStorage.getItem("selectedClassId");
+  
+  if (!classId) {
+    // xử lý khi chưa chọn lớp
+    return;
+  }
 
   const fetchStats = async () => {
     try {

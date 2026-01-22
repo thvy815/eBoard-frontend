@@ -9,7 +9,6 @@ import {
   Users,
   Sparkles,
   AlertCircle,
-  BarChart2,
   Settings,
 } from "lucide-react";
 
@@ -60,12 +59,6 @@ export default function Sidebar() {
           label="Cảnh báo vi phạm"
           icon={<AlertCircle />}
           active={pathname === "/main/violation"}
-        />
-        <SidebarItem
-          href="/main/report"
-          label="Báo cáo thống kê"
-          icon={<BarChart2 />}
-          active={pathname === "/main/report"}
         />
         <SidebarItem
           href="/main/setting"

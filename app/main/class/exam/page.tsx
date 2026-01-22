@@ -33,7 +33,12 @@ export default function ExamPage() {
   const [weekBase, setWeekBase] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  const classId = "04598b0c-3d9f-4519-8581-dadee7db189a";
+  const classId = localStorage.getItem("selectedClassId");
+  
+  if (!classId) {
+    // xử lý khi chưa chọn lớp
+    return;
+  }
 
   // Mapping dữ liệu từ BE sang FE
   const mapExamFromBE = (e: any): ExamSchedule => {

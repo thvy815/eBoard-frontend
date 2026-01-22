@@ -30,6 +30,7 @@ export const scoreService = {
     ];
   },
 
+  /* ====== Danh sách học sinh + conduct ====== */
   async getStudentScores(params: {
     classId: string;
     semester: number;
@@ -43,6 +44,7 @@ export const scoreService = {
       studentName: s.studentName,
       averageScore: s.averageScore,
       grade: s.grade,
+      conduct: s.conduct ?? null, // ✅ FIX
     }));
   },
 
@@ -66,7 +68,6 @@ export const scoreService = {
       }));
     } catch (err: any) {
       if (err.response?.status === 404) {
-        // 👉 CHƯA CÓ BẢNG ĐIỂM → LẤY MÔN HỌC
         const subjectsRes = await api.get(
           `/score/${params.classId}/subjects`
         );
@@ -84,7 +85,7 @@ export const scoreService = {
     }
   },
 
-  /* ====== Tổng kết học kỳ học sinh ====== */
+  /* ====== Tổng kết học kỳ học sinh (SUMMARY) ====== */
   async getScoreDetailSummary(params: {
     classId: string;
     studentId: string;
@@ -100,41 +101,42 @@ export const scoreService = {
       return {
         averageScore: sheet.averageScore,
         grade: sheet.grade,
+        conduct: sheet.conduct ?? null, // ✅ FIX
         rank: sheet.rank,
       };
     } catch (err: any) {
       if (err.response?.status === 404) {
-        return null; // chưa có bảng điểm
+        return null;
       }
       throw err;
     }
   },
 
   /* ====== Bảng điểm theo môn học ====== */
-    async getScoresBySubject(params: {
-      classId: string;
-      subjectId: string;
-      semester: number;
-    }): Promise<ScoreBySubject[]> {
-      const res = await api.get(
-        `/score/${params.classId}/subject/${params.subjectId}/scores/${params.semester}`
-      );
+  async getScoresBySubject(params: {
+    classId: string;
+    subjectId: string;
+    semester: number;
+  }): Promise<ScoreBySubject[]> {
+    const res = await api.get(
+      `/score/${params.classId}/subject/${params.subjectId}/scores/${params.semester}`
+    );
 
-      return res.data.map((s: any) => ({
-        studentId: s.studentId,
-        studentName: s.studentName,
+    return res.data.map((s: any) => ({
+      studentId: s.studentId,
+      studentName: s.studentName,
 
-        midtermScore: s.midtermScore ?? null,
-        finalScore: s.finalScore ?? null,
-        averageScore: s.averageScore ?? null,
+      midtermScore: s.midtermScore ?? null,
+      finalScore: s.finalScore ?? null,
+      averageScore: s.averageScore ?? null,
 
-        grade: s.grade ?? null,
-        note: s.note ?? null,
-      }));
-    },
+      grade: s.grade ?? null,
+      note: s.note ?? null,
+    }));
+  },
 
-/* ====== Lưu điểm theo môn học ====== */
-async saveScoresBySubject(payload: {
+  /* ====== Lưu điểm theo môn học ====== */
+  async saveScoresBySubject(payload: {
     classId: string;
     subjectId: string;
     semester: number;
@@ -169,7 +171,7 @@ async saveScoresBySubject(payload: {
     );
   },
 
-  /* ====== Danh sách học sinh theo lớp (option) ====== */
+  /* ====== Danh sách học sinh theo lớp ====== */
   async getStudents(classId: string): Promise<{ id: string; name: string }[]> {
     const res = await api.get(`/students/${classId}/lists`);
 

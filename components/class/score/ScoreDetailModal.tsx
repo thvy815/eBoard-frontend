@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Modal from "@/components/ui/Modal";
 import ScoreDetailTable from "./ScoreDetailTable";
-import { SubjectScore } from "@/types/score";
+import { ScoreDetailSummary, SubjectScore } from "@/types/score";
 import { scoreService } from "@/services/scoreService";
 // import scoreService from "...";
 
@@ -21,6 +21,7 @@ export default function ScoreDetailModal({
   studentId,
 }: Props) {
   const [data, setScores] = useState<SubjectScore[]>([]);
+  const [summary, setSummary] = useState<ScoreDetailSummary | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -29,23 +30,15 @@ export default function ScoreDetailModal({
     setLoading(true);
 
     Promise.all([
-      scoreService.getSubjects(classId), // ✅ luôn đủ môn
-      scoreService
-        .getSubjectScores({
-          classId,
-          studentId,
-          semester,
-        })
-        .catch(() => []), // HS chưa có điểm
+      scoreService.getSubjects(classId),
+      scoreService.getSubjectScores({ classId, studentId, semester }).catch(() => []),
+      scoreService.getScoreDetailSummary({ classId, semester, studentId }) // ✅ thêm
     ])
-      .then(([subjects, subjectScores]) => {
-        const scoreMap = new Map(
-          subjectScores.map((s) => [s.subjectId, s])
-        );
+      .then(([subjects, subjectScores, summary]) => {
+        const scoreMap = new Map(subjectScores.map(s => [s.subjectId, s]));
 
-        const merged = subjects.map((subj) => {
+        const merged = subjects.map(subj => {
           const found = scoreMap.get(subj.id);
-
           return {
             subjectId: subj.id,
             subjectName: subj.name,
@@ -56,17 +49,17 @@ export default function ScoreDetailModal({
         });
 
         setScores(merged);
+        setSummary(summary); // ✅ set summary
       })
       .finally(() => setLoading(false));
   }, [studentId, classId, semester]);
-
-
+  
   return (
     <Modal open={open} onClose={onClose} title="Chi tiết điểm">
       {loading ? (
         <div className="p-4 text-center">Đang tải...</div>
       ) : (
-        <ScoreDetailTable data={data} />
+        <ScoreDetailTable data={data} summary={summary} />
       )}
     </Modal>
   );

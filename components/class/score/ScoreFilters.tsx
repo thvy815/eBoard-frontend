@@ -155,10 +155,6 @@ export default function ScoreFilters({
               Nhập điểm
             </Button>
 
-            <Button icon={Printer} variant="outline" onClick={onPrint}>
-                In bảng điểm
-            </Button>
-
             <Button icon={FileDown} variant="outline" onClick={onExportExcel}>
               Xuất Excel
             </Button>
@@ -182,11 +178,6 @@ export default function ScoreFilters({
               onClick={onImportExcel}
             >
               Đăng tải Excel
-            </Button>
-
-
-            <Button icon={Printer} variant="outline" onClick={onPrint}>
-              In bảng điểm theo môn
             </Button>
 
             <Button icon={FileDown} variant="outline" onClick={onExportExcel}>

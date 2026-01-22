@@ -51,6 +51,37 @@ export const attendanceService = {
     await api.post(
       `/attendance/class/${classId}/notify-absence-without-excuse/${date}`
     );
-  }
+  },
+
+  /* ===== ABSENT REQUEST ===== */
+async getPendingAbsentRequests(classId: string, page = 1, size = 50) {
+  const res = await api.get(
+    `/attendance/absent-requests/class/${classId}/pending?pageNumber=${page}&pageSize=${size}`
+  );
+  return res.data;
+},
+
+async approveAbsentRequest(requestId: string) {
+  await api.post(`/attendance/absent-request/${requestId}/approve`);
+},
+
+async rejectAbsentRequest(requestId: string) {
+  await api.post(`/attendance/absent-request/${requestId}/reject`);
+},
+
+async getApprovedAbsentRequests(classId: string, page = 1, size = 50) {
+  const res = await api.get(
+    `/attendance/absent-requests/class/${classId}/approved?pageNumber=${page}&pageSize=${size}`
+  );
+  return res.data;
+},
+
+async getRejectedAbsentRequests(classId: string, page = 1, size = 50) {
+  const res = await api.get(
+    `/attendance/absent-requests/class/${classId}/rejected?pageNumber=${page}&pageSize=${size}`
+  );
+  return res.data;
+},
+
 
 };

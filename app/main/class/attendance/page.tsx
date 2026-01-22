@@ -24,6 +24,68 @@ export default function AttendancePage() {
   const [notCreated, setNotCreated] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const [showModal, setShowModal] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  type TabType = "pending" | "approved" | "rejected";
+
+  const [activeTab, setActiveTab] = useState<TabType>("pending");
+  const [requests, setRequests] = useState<any[]>([]);
+
+  const loadPendingRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const res = await attendanceService.getPendingAbsentRequests(classId);
+      setPendingRequests(res);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  const loadRequests = async (tab: TabType) => {
+    setLoadingRequests(true);
+    try {
+      let res = [];
+
+      if (tab === "pending") {
+        res = await attendanceService.getPendingAbsentRequests(classId);
+      }
+
+      if (tab === "approved") {
+        res = await attendanceService.getApprovedAbsentRequests(classId);
+      }
+
+      if (tab === "rejected") {
+        res = await attendanceService.getRejectedAbsentRequests(classId);
+      }
+
+      setRequests(res);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  const openApproveModal = async () => {
+    setShowModal(true);
+    setActiveTab("pending");
+    await loadRequests("pending");
+  };
+
+  const switchTab = async (tab: TabType) => {
+    setActiveTab(tab);
+    await loadRequests(tab);
+  };
+
+  const handleApprove = async (id: string) => {
+    await attendanceService.approveAbsentRequest(id);
+    await loadRequests("pending");
+  };
+
+  const handleReject = async (id: string) => {
+    await attendanceService.rejectAbsentRequest(id);
+    await loadRequests("pending");
+  };
+
   /* ================= LOAD ================= */
   const load = async () => {
     try {
@@ -157,6 +219,15 @@ export default function AttendancePage() {
             >
               Gửi thông báo vắng
             </Button>
+
+            <Button
+              icon={Bell}
+              variant="outline"
+              onClick={openApproveModal}
+            >
+              Duyệt xin phép
+            </Button>
+
           </div>
         )}
       </div>
@@ -189,6 +260,103 @@ export default function AttendancePage() {
           />
         </>
       )}
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white w-[900px] rounded-xl p-6 space-y-4 shadow-lg">
+
+            {/* HEADER */}
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-semibold">📄 Đơn xin vắng</h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-gray-500 hover:text-black"
+              >
+                ✖
+              </button>
+            </div>
+
+            {/* TABS */}
+            <div className="flex gap-2 border-b pb-2">
+              {[
+                { key: "pending", label: "🕒 Đang chờ" },
+                { key: "approved", label: "✅ Chấp nhận" },
+                { key: "rejected", label: "❌ Từ chối" },
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => switchTab(tab.key as TabType)}
+                  className={`px-4 py-2 rounded-t font-medium ${
+                    activeTab === tab.key
+                      ? "bg-blue-100 text-blue-700"
+                      : "text-gray-500 hover:text-black"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* CONTENT */}
+            {loadingRequests && (
+              <div className="text-center py-6">Đang tải dữ liệu...</div>
+            )}
+
+            {!loadingRequests && requests.length === 0 && (
+              <div className="text-center py-6 text-gray-500">
+                Không có đơn trong mục này
+              </div>
+            )}
+
+            {!loadingRequests && requests.length > 0 && (
+              <div className="space-y-3 max-h-[420px] overflow-y-auto">
+
+                {requests.map(req => (
+                  <div
+                    key={req.id}
+                    className="border rounded-lg p-4 flex justify-between items-center"
+                  >
+                    <div>
+                      <div className="font-medium">{req.studentName}</div>
+                      <div className="text-sm text-gray-600">
+                        📅 {req.fromDate} → {req.toDate}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        📝 {req.reason}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        Trạng thái: {req.status}
+                      </div>
+                    </div>
+
+                    {/* ACTIONS — chỉ hiện nếu Pending */}
+                    {activeTab === "pending" && (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => handleReject(req.id)}
+                        >
+                          ❌ Từ chối
+                        </Button>
+
+                        <Button
+                          variant="primary"
+                          onClick={() => handleApprove(req.id)}
+                        >
+                          ✅ Duyệt
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

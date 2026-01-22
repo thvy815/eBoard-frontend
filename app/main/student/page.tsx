@@ -9,53 +9,27 @@ import ConfirmParentsModal from "@/components/student/ConfirmParentsModal";
 import StudentDetailModal from "@/components/student/StudentDetailModal";
 import ParentTicketModal from "@/components/student/ParentTicketModal";
 import DeleteConfirmModal from "@/components/student/DeleteConfirmModal";
-import AddStudentModal, { CreateStudentRequest } from "@/components/class/AddStudentModal";
-import type { StudentRow, ImportedStudent } from "@/types/student";
+import AddStudentModal from "@/components/class/AddStudentModal";
+import type { CreateStudentRequest } from "@/types/Student";
+
+import type { StudentRow, ImportedStudent } from "@/types/Student";
 import { classService } from "@/services/classService";
 import { studentService } from "@/services/studentService";
+import { parentService } from "@/services/parentService";
+
+import {
+  SELECTED_CLASS_ID_KEY,
+  SELECTED_CLASS_NAME_KEY,
+  formatDobISOToVN,
+  payloadToImportedStudent,
+  splitFullName,
+  mapStudentFromList,
+  mapStudentFromDetail,
+} from "@/utils/studentMapper";
+
+import { DownloadIcon, EditIcon, PlusIcon, SearchIcon, TrashIcon, DocIcon, UploadIcon } from "@/components/ui/icon";
 
 const PRIMARY = "#518581";
-
-const SELECTED_CLASS_ID_KEY = "selectedClassId";
-const SELECTED_CLASS_NAME_KEY = "selectedClassName";
-
-function formatDobISOToVN(iso?: string) {
-  if (!iso) return "";
-  const [y, m, d] = String(iso).split("-");
-  if (!y || !m || !d) return String(iso);
-  return `${d}/${m}/${y}`;
-}
-
-function payloadToImportedStudent(p: CreateStudentRequest, idx: number): ImportedStudent {
-  const fullName = `${p.lastName} ${p.firstName}`.trim();
-
-  return {
-    id: `imp_${idx}`,
-    fullName: fullName || "Không rõ",
-    dob: formatDobISOToVN(p.dateOfBirth),
-
-    province: p.province ?? "",
-    district: p.district ?? "",
-    ward: p.ward ?? "",
-    gender: p.gender ?? "",
-    relationshipWithParent: p.relationshipWithParent ?? "",
-
-    address: p.address || "-",
-    parentName: p.parentFullName || "-",
-    email: "",
-    phone: p.parentPhoneNumber || "-",
-    password: "-",
-  };
-}
-
-// tách họ tên "Nguyễn Văn A" -> lastName + firstName
-function splitFullName(fullName: string) {
-  const name = fullName.trim().replace(/\s+/g, " ");
-  const parts = name.split(" ").filter(Boolean);
-  const firstName = parts.pop() || "";
-  const lastName = parts.join(" ");
-  return { firstName, lastName };
-}
 
 export default function StudentsPage() {
   const [hydrated, setHydrated] = useState(false);
@@ -101,27 +75,10 @@ export default function StudentsPage() {
   const [importError, setImportError] = useState("");
 
   const [selectedStudent, setSelectedStudent] = useState<StudentRow | null>(null);
+
+  // delete
   const [deleting, setDeleting] = useState(false);
-const [deleteError, setDeleteError] = useState("");
-async function handleDeleteStudent() {
-  if (!classId || !selectedStudent?.id) return;
-
-  try {
-    setDeleteError("");
-    setDeleting(true);
-
-    await classService.removeStudentFromClass(classId, selectedStudent.id);
-
-    setDeleteOpen(false);
-    setSelectedStudent(null);
-    await loadStudents(); // cập nhật lại tổng + danh sách
-  } catch (e: any) {
-    setDeleteError(e?.message ?? "Xóa học sinh thất bại.");
-  } finally {
-    setDeleting(false);
-  }
-}
-
+  const [deleteError, setDeleteError] = useState("");
 
   async function loadStudents() {
     if (!classId) {
@@ -137,34 +94,7 @@ async function handleDeleteStudent() {
       const json = await classService.getStudentsByClassId(classId, pageNumber, pageSize);
       const list = Array.isArray(json?.data) ? json.data : [];
 
-      const mapped: StudentRow[] = list.map((s: any) => {
-        const firstName = s?.firstName ?? "";
-        const lastName = s?.lastName ?? "";
-        const fullName = `${lastName} ${firstName}`.trim() || "Không rõ";
-
-        const parentName = (s?.parent?.fullName ?? "").trim() || "Không rõ";
-        const email = (s?.parent?.email ?? "").trim() || "-";
-        const phone = (s?.parent?.phoneNumber ?? "").trim() || "-";
-
-        return {
-          id: s?.id ?? "",
-          fullName,
-          dob: formatDobISOToVN(s?.dateOfBirth),
-
-          // list API có thể không trả mấy field này -> fallback
-          gender: s?.gender ?? "",
-          relationshipWithParent: s?.relationshipWithParent ?? "",
-          address: (s?.fullAddress ?? s?.address ?? "").trim() || "-",
-          province: s?.province ?? "",
-          district: s?.district ?? "",
-          ward: s?.ward ?? "",
-
-          parentName,
-          email,
-          phone,
-          password: "-",
-        };
-      });
+      const mapped: StudentRow[] = list.map(mapStudentFromList);
 
       setStudents(mapped.filter((x) => x.id));
     } catch (e: any) {
@@ -178,6 +108,7 @@ async function handleDeleteStudent() {
   useEffect(() => {
     if (!hydrated) return;
     loadStudents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, classId]);
 
   const filtered = useMemo(() => {
@@ -194,7 +125,6 @@ async function handleDeleteStudent() {
     });
   }, [students, q]);
 
-  const gradeLabel = " ";
   const totalLabel = `Tổng số học sinh: ${students.length}`;
 
   async function handleAddStudent(payload: CreateStudentRequest) {
@@ -204,10 +134,7 @@ async function handleDeleteStudent() {
       setAddError("");
       setAdding(true);
 
-      await studentService.createStudent({
-        ...payload,
-        classId,
-      });
+      await studentService.createStudent({ ...payload, classId });
 
       setAddOpen(false);
       await loadStudents();
@@ -218,7 +145,25 @@ async function handleDeleteStudent() {
     }
   }
 
-  // Import create thật lên BE theo danh sách đã confirm
+  async function handleDeleteStudent() {
+    if (!classId || !selectedStudent?.id) return;
+
+    try {
+      setDeleteError("");
+      setDeleting(true);
+
+      await classService.removeStudentFromClass(classId, selectedStudent.id);
+
+      setDeleteOpen(false);
+      setSelectedStudent(null);
+      await loadStudents();
+    } catch (e: any) {
+      setDeleteError(e?.message ?? "Xóa học sinh thất bại.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function handleConfirmImport(selectedPreviewRows: ImportedStudent[]) {
     if (!classId) return;
 
@@ -230,10 +175,7 @@ async function handleDeleteStudent() {
       const selectedPayloads = importPayloads.filter((_, idx) => selectedIds.has(importPreview[idx]?.id));
 
       for (const p of selectedPayloads) {
-        await studentService.createStudent({
-          ...p,
-          classId,
-        });
+        await studentService.createStudent({ ...p, classId });
       }
 
       setConfirmOpen(false);
@@ -246,6 +188,7 @@ async function handleDeleteStudent() {
       setImporting(false);
     }
   }
+
   if (!hydrated) return null;
 
   return (
@@ -254,19 +197,16 @@ async function handleDeleteStudent() {
         {/* Header */}
         <div className="flex items-start justify-between gap-6">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Quản lý học sinh - {className}</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              {gradeLabel} {gradeLabel ? "•" : ""} {totalLabel}
-            </p>
+            <h1 className="text-2xl font-semibold text-gray-900">Quản lý học sinh - {className}</h1>
+            <p className="text-base text-gray-500 mt-1">{totalLabel}</p>
           </div>
 
           <div className="flex gap-3">
-            {/* THÊM HS */}
             <button
               type="button"
               onClick={() => setAddOpen(true)}
               className={clsx(
-                "h-10 px-4 rounded-xl text-white font-medium shadow-sm flex items-center gap-2",
+                "h-10 px-4 rounded-xl text-white font-medium shadow-sm flex items-center gap-2 text-sm",
                 (!classId || adding) && "opacity-70 cursor-not-allowed"
               )}
               style={{ backgroundColor: PRIMARY }}
@@ -276,12 +216,11 @@ async function handleDeleteStudent() {
               Thêm học sinh
             </button>
 
-            {/* IMPORT */}
             <button
               type="button"
               onClick={() => setImportOpen(true)}
               className={clsx(
-                "h-10 px-4 rounded-xl text-white font-medium shadow-sm flex items-center gap-2",
+                "h-10 px-4 rounded-xl text-white font-medium shadow-sm flex items-center gap-2 text-sm",
                 !classId && "opacity-70 cursor-not-allowed"
               )}
               style={{ backgroundColor: "#f59e0b" }}
@@ -291,11 +230,10 @@ async function handleDeleteStudent() {
               Nhập file excel
             </button>
 
-            {/* EXPORT */}
             <button
               type="button"
               onClick={() => setExportOpen(true)}
-              className="h-10 px-4 rounded-xl border border-emerald-300 text-emerald-800 bg-white font-medium shadow-sm flex items-center gap-2"
+              className="h-10 px-4 rounded-xl border border-emerald-300 text-emerald-800 bg-white font-medium shadow-sm flex items-center gap-2 text-sm"
               disabled={!classId}
             >
               <DownloadIcon />
@@ -304,7 +242,6 @@ async function handleDeleteStudent() {
           </div>
         </div>
 
-        {/* Errors / loading */}
         {loadError ? (
           <div className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{loadError}</div>
         ) : null}
@@ -321,7 +258,7 @@ async function handleDeleteStudent() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Tìm kiếm học sinh theo tên, phụ huynh, SĐT..."
-              className="w-full h-11 rounded-xl border border-gray-200 bg-white pl-11 pr-4 outline-none focus:ring-2"
+              className="w-full h-11 rounded-xl border border-gray-200 bg-white pl-11 pr-4 outline-none focus:ring-2 text-sm"
               style={{ ["--tw-ring-color" as any]: `${PRIMARY}33` }}
             />
           </div>
@@ -330,18 +267,19 @@ async function handleDeleteStudent() {
         {/* Table */}
         <div className="mt-4 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px]">
+            <table className="w-full min-w-[1180px]">
               <thead>
                 <tr style={{ backgroundColor: PRIMARY }} className="text-white">
-                  <th className="text-left text-xs font-semibold px-5 py-4 w-[70px]">STT</th>
-                  <th className="text-left text-xs font-semibold px-5 py-4 w-[170px]">Họ và tên HS</th>
-                  <th className="text-left text-xs font-semibold px-5 py-4 w-[130px]">Ngày sinh</th>
-                  <th className="text-left text-xs font-semibold px-5 py-4 w-[240px]">Địa chỉ</th>
-                  <th className="text-left text-xs font-semibold px-5 py-4 w-[170px]">Họ và tên PHHS</th>
-                  <th className="text-left text-xs font-semibold px-5 py-4 w-[190px]">Email</th>
-                  <th className="text-left text-xs font-semibold px-5 py-4 w-[160px]">SĐT / Tên đăng nhập</th>
-                  <th className="text-left text-xs font-semibold px-5 py-4 w-[120px]">Mật khẩu</th>
-                  <th className="text-left text-xs font-semibold px-5 py-4 w-[130px]">Thao tác</th>
+                  <th className="text-left text-sm font-semibold px-5 py-4 w-[70px]">STT</th>
+                  {/* ✅ giãn cột tên + nowrap */}
+                  <th className="text-left text-sm font-semibold px-5 py-4 w-[230px]">Họ và tên HS</th>
+                  <th className="text-left text-sm font-semibold px-5 py-4 w-[140px]">Ngày sinh</th>
+                  <th className="text-left text-sm font-semibold px-5 py-4 w-[320px]">Địa chỉ</th>
+                  <th className="text-left text-sm font-semibold px-5 py-4 w-[210px]">Họ và tên PHHS</th>
+                  <th className="text-left text-sm font-semibold px-5 py-4 w-[230px]">Email</th>
+                  <th className="text-left text-sm font-semibold px-5 py-4 w-[190px]">SĐT / Tên đăng nhập</th>
+                  <th className="text-left text-sm font-semibold px-5 py-4 w-[140px]">Mật khẩu</th>
+                  <th className="text-left text-sm font-semibold px-5 py-4 w-[140px]">Thao tác</th>
                 </tr>
               </thead>
 
@@ -357,32 +295,35 @@ async function handleDeleteStudent() {
                     <tr key={st.id} className="border-t border-gray-100">
                       <td className="px-5 py-5 text-sm text-gray-700">{idx + 1}</td>
 
-                      <td className="px-5 py-5 text-sm text-gray-800 font-medium">{st.fullName}</td>
+                      {/* ✅ nowrap để tên nằm ngang */}
+                      <td className="px-5 py-5 text-sm text-gray-800 font-medium whitespace-nowrap">
+                        {st.fullName}
+                      </td>
 
-                      <td className="px-5 py-5 text-sm text-gray-700">{st.dob}</td>
+                      <td className="px-5 py-5 text-sm text-gray-700 whitespace-nowrap">{st.dob}</td>
 
                       <td className="px-5 py-5 text-sm text-gray-700">
-                        <div className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[220px]" title={st.address}>
+                        <div className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px]" title={st.address}>
                           {st.address}
                         </div>
                       </td>
 
-                      <td className="px-5 py-5 text-sm text-gray-700">{st.parentName}</td>
+                      <td className="px-5 py-5 text-sm text-gray-700 whitespace-nowrap">{st.parentName}</td>
 
                       <td className="px-5 py-5 text-sm text-gray-700">
-                        <div className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[170px]" title={st.email}>
+                        <div className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[220px]" title={st.email}>
                           {st.email}
                         </div>
                       </td>
 
                       <td className="px-5 py-5 text-sm">
-                        <span className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700">
+                        <span className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700 whitespace-nowrap">
                           {st.phone}
                         </span>
                       </td>
 
                       <td className="px-5 py-5 text-sm">
-                        <span className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800">
+                        <span className="inline-flex items-center px-3 py-1 rounded-md text-xs font-medium bg-gray-100 text-gray-800 whitespace-nowrap">
                           {st.password}
                         </span>
                       </td>
@@ -406,29 +347,7 @@ async function handleDeleteStudent() {
                             onClick={async () => {
                               try {
                                 const s = await studentService.getStudentById(st.id);
-
-                                // ✅ FIX address: ưu tiên fullAddress
-                                const addr = (s.fullAddress ?? s.address ?? "").trim();
-
-                                setSelectedStudent({
-                                  id: s.id,
-                                  fullName: `${s.lastName ?? ""} ${s.firstName ?? ""}`.trim(),
-                                  dob: s.dateOfBirth ?? "", // ISO yyyy-mm-dd
-
-                                  address: addr,
-                                  province: s.province ?? "",
-                                  district: s.district ?? "",
-                                  ward: s.ward ?? "",
-
-                                  gender: s.gender ?? "",
-                                  relationshipWithParent: s.relationshipWithParent ?? "",
-
-                                  parentName: s.parent?.fullName ?? "-",
-                                  phone: s.parent?.phoneNumber ?? "-",
-                                  email: s.parent?.email ?? "-",
-                                  password: "-",
-                                });
-
+                                setSelectedStudent(mapStudentFromDetail(s));
                                 setDetailOpen(true);
                               } catch (e: any) {
                                 alert(e?.message ?? "Không lấy được chi tiết học sinh.");
@@ -520,49 +439,60 @@ async function handleDeleteStudent() {
 
       {/* Detail / Edit */}
       <StudentDetailModal
-        open={detailOpen}
-        student={selectedStudent}
-        onClose={() => setDetailOpen(false)}
-        onSave={async (updated) => {
-          try {
-            const { firstName, lastName } = splitFullName(updated.fullName);
+  open={detailOpen}
+  student={selectedStudent}
+  onClose={() => setDetailOpen(false)}
+  onSave={async (updated) => {
+    try {
+      // 1) update student
+      const { firstName, lastName } = splitFullName(updated.fullName);
 
-            await studentService.updateStudent(updated.id, {
-              firstName,
-              lastName,
-              relationshipWithParent: updated.relationshipWithParent,
-              dateOfBirth: updated.dob, // ISO yyyy-mm-dd
-              gender: updated.gender,
-              address: updated.address,
-              province: updated.province,
-              district: updated.district,
-              ward: updated.ward,
-            });
+      await studentService.updateStudent(updated.id, {
+        firstName,
+        lastName,
+        relationshipWithParent: updated.relationshipWithParent,
+        dateOfBirth: updated.dob, // ISO yyyy-mm-dd
+        gender: updated.gender,
+        address: updated.address,
+        province: updated.province,
+        ward: updated.ward,
+      });
 
-            setDetailOpen(false);
-            await loadStudents();
-          } catch (e: any) {
-            alert(e?.message ?? "Cập nhật học sinh thất bại.");
-          }
-        }}
-      />
+      // 2) update parent (CẦN parentId)
+      if (!updated.parentId?.trim()) throw new Error("Thiếu parentId để cập nhật phụ huynh.");
+
+      await parentService.updateParentInfo(updated.parentId, {
+        fullName: updated.parentName.trim(),
+        email: updated.email.trim(),
+        phoneNumber: updated.phone.trim(),
+        address: updated.address.trim(), // hoặc parentAddress nếu mày có field riêng
+        healthCondition: "N/A",
+      });
+
+      setDetailOpen(false);
+      await loadStudents();
+    } catch (e: any) {
+      alert(e?.message ?? "Cập nhật thất bại.");
+    }
+  }}
+/>
+
 
       {/* Ticket */}
       <ParentTicketModal open={ticketOpen} student={selectedStudent} onClose={() => setTicketOpen(false)} />
 
       {/* Delete confirm */}
       <DeleteConfirmModal
-  open={deleteOpen}
-  onClose={() => {
-    if (deleting) return; // tránh đóng khi đang xóa
-    setDeleteError("");
-    setDeleteOpen(false);
-  }}
-  onConfirm={handleDeleteStudent}
-  loading={deleting}
-  error={deleteError}
-/>
-
+        open={deleteOpen}
+        onClose={() => {
+          if (deleting) return;
+          setDeleteError("");
+          setDeleteOpen(false);
+        }}
+        onConfirm={handleDeleteStudent}
+        loading={deleting}
+        error={deleteError}
+      />
     </main>
   );
 }
@@ -598,85 +528,5 @@ function IconBtn({
     >
       {children}
     </button>
-  );
-}
-
-/* ---------------- Icons ---------------- */
-
-function SearchIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M21 21l-4.3-4.3m1.8-5.2a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function UploadIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 3v12m0-12 4 4m-4-4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M4 17v3h16v-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function DownloadIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 3v10m0 0 4-4m-4 4-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M4 17v3h16v-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function EditIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0 0-3L16.5 4.5a2.1 2.1 0 0 0-3 0L3 15v5Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path d="M13.5 6.5l4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function DocIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M7 3h7l3 3v15a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <path d="M14 3v3h3" stroke="currentColor" strokeWidth="2" />
-      <path d="M8 12h8M8 16h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M8 6V4h8v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M6 6l1 16h10l1-16" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
   );
 }

@@ -4,8 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { useRouter } from "next/navigation";
+
 import { authService } from "@/services/authService";
 import { tokenStorage } from "@/services/tokenStorage";
+import { teacherSession } from "@/services/teacherSession";
+import { decodeJwt } from "@/utils/jwt";
 
 const PRIMARY = "#518581";
 
@@ -32,15 +35,24 @@ export default function LoginPage() {
     try {
       setIsLoading(true);
 
-      // Login TEACHER (đúng endpoint của BE bạn: POST /api/auth/teacher/login)
+      // 1️⃣ Login
       const tokens = await authService.teacherLogin({
         email: email.trim(),
         password,
       });
 
-      // Lưu token theo remember: true -> localStorage, false -> sessionStorage
+      // 2️⃣ Lưu token
       tokenStorage.save(tokens, remember);
 
+      // 3️⃣ Decode JWT để lấy teacherId
+      const payload = decodeJwt(tokens.accessToken);
+      const teacherId = payload?.sub || payload?.nameid;
+
+      if (teacherId) {
+        teacherSession.setTeacherId(teacherId, remember);
+      }
+
+      // 4️⃣ Redirect
       router.push("/main");
     } catch (err: any) {
       setErrorMsg(err?.message ?? "Đăng nhập thất bại. Vui lòng thử lại.");
@@ -67,12 +79,11 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Error */}
-          {errorMsg ? (
+          {errorMsg && (
             <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
               {errorMsg}
             </div>
-          ) : null}
+          )}
 
           {/* Email */}
           <div>
@@ -116,7 +127,6 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-md"
-                title={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
                 disabled={isLoading}
               >
                 <EyeIcon />
@@ -126,7 +136,7 @@ export default function LoginPage() {
 
           {/* Remember + Forgot */}
           <div className="flex items-center justify-between pt-1">
-            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
               <input
                 type="checkbox"
                 checked={remember}
@@ -138,15 +148,13 @@ export default function LoginPage() {
               Ghi nhớ đăng nhập
             </label>
 
-            <button
-              type="button"
+            <Link
+              href="/forgot-password"
               className="text-sm hover:underline"
               style={{ color: PRIMARY }}
-              onClick={() => router.push("/forgot-password")}
-              disabled={isLoading}
             >
               Quên mật khẩu?
-            </button>
+            </Link>
           </div>
 
           {/* Submit */}
@@ -162,7 +170,6 @@ export default function LoginPage() {
             {isLoading ? "Đang đăng nhập..." : "Đăng nhập"}
           </button>
 
-          {/* Footer */}
           <div className="text-center text-xs text-gray-500 pt-2">
             Chưa có tài khoản?{" "}
             <Link

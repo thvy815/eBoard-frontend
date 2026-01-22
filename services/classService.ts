@@ -68,6 +68,7 @@ export const classService = {
   },
 
   // GET /api/classes/teaching?teacherId=...
+  // get class đang dạy
   async getTeachingClasses(
     teacherId: string
   ): Promise<TeachingClassListResponse> {
@@ -106,6 +107,14 @@ export const classService = {
       }
     );
     return res.data;
+  },
+
+  //get all class
+  async getAllClassesByTeacher(teacherId: string, pageNumber = 1, pageSize = 20) {
+    const res = await api.get("/classes", {
+      params: { teacherId, pageNumber, pageSize },
+    });
+    return res.data; // dạng { data: [...] }
   },
 
   // DELETE /api/classes/{classId}/students/{studentId}

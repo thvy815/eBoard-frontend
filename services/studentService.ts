@@ -1,44 +1,8 @@
 // src/services/student.service.ts
 import api from "@/lib/api";
+import { CreateStudentRequest, StudentInfoDto } from "@/types/Student";
 
-export type CreateStudentRequest = {
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string; // yyyy-mm-dd
-  address: string;
-  province: string;
-  district: string;
-  ward: string;
-  gender: string;
-  parentPhoneNumber: string;
-  relationshipWithParent: string;
-  parentFullName: string;
-  parentHealthCondition: string;
-  classId: string; // GUID
-};
 
-export type StudentInfoDto = {
-  id: string;
-
-  firstName?: string;
-  lastName?: string;
-  fullName?: string;
-
-  dateOfBirth?: string; // yyyy-mm-dd
-  address?: string;
-  province?: string;
-  district?: string;
-  ward?: string;
-  gender?: string;
-
-  parentPhoneNumber?: string;
-  relationshipWithParent?: string;
-  parentFullName?: string;
-  parentHealthCondition?: string;
-
-  // BE có trả thêm field nào (email/username/password...) thì vẫn không lỗi
-  [key: string]: any;
-};
 
 export type StudentOptionDto = {
   id: string;

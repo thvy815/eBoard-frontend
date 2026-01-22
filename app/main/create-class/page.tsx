@@ -11,89 +11,78 @@ import Textarea from "@/components/ui/inputType/TextArea";
 import Select from "@/components/ui/inputType/Select";
 
 import { classService } from "@/services/classService";
+import { PlusIcon, CheckIcon } from "@/components/ui/icon";
+
+import type { CreateClassForm, CreatedClass, Option } from "@/types/Class";
+import { compareYYYYMM, isValidMonth, isValidYear, toFirstDayISO } from "@/utils/classDate";
+
+import { tokenStorage } from "@/services/tokenStorage";
+import { decodeJwt } from "@/utils/jwt";
 
 const PRIMARY = "#518581";
 const SELECTED_CLASS_ID_KEY = "selectedClassId";
-const CURRENT_TEACHER_ID_KEY = "teacherId"; // giữ lại, nhưng hiện tại mock
 
-const MOCK_TEACHER_ID = "0ae25138-f3ca-43a4-aa36-d485f2e5f323";
-
-type CreateClassForm = {
-  name: string;
-  gradeId: string;
-  roomName: string;
-
-  startMonth: string; // 1..12
-  startYear: string; // 4 digits
-  endMonth: string; // 1..12
-  endYear: string; // 4 digits
-
-  maxCapacity: string; // number string
-  classDescription: string; // UI dùng field này, POST map -> description
+const initialForm: CreateClassForm = {
+  name: "",
+  gradeId: "",
+  roomName: "",
+  startMonth: "",
+  startYear: "",
+  endMonth: "",
+  endYear: "",
+  maxCapacity: "",
+  classDescription: "",
 };
 
-type CreatedClass = {
-  id: string;
-  name: string;
-  gradeId: string;
-  teacherId: string;
-  roomName: string;
-  startDate: string; // yyyy-mm-dd
-  endDate: string; // yyyy-mm-dd
-  currentStudentCount: number;
-  maxCapacity: number;
-  classDescription: string;
-};
+function extractTeacherIdFromAccessToken(): string | null {
+  const token = tokenStorage.getAccessToken();
+  if (!token) return null;
 
-function toFirstDayISO(month: string, year: string) {
-  const m = String(month).padStart(2, "0");
-  const y = String(year);
-  return `${y}-${m}-01`;
-}
+  try {
+    const payload: any = decodeJwt(token);
 
-function isValidMonth(m: string) {
-  const n = Number(m);
-  return Number.isInteger(n) && n >= 1 && n <= 12;
-}
+    const id =
+      payload?.id ||
+      payload?.sub ||
+      payload?.teacherId ||
+      payload?.["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"];
 
-function isValidYear(y: string) {
-  return /^\d{4}$/.test(y) && Number(y) >= 1900 && Number(y) <= 2100;
-}
-
-function compareYYYYMM(aY: string, aM: string, bY: string, bM: string) {
-  const a = Number(aY) * 100 + Number(aM);
-  const b = Number(bY) * 100 + Number(bM);
-  return a - b;
+    return typeof id === "string" && id.trim() ? id : null;
+  } catch {
+    return null;
+  }
 }
 
 export default function CreateClassPage() {
   const router = useRouter();
 
-  const [form, setForm] = useState<CreateClassForm>({
-    name: "",
-    gradeId: "",
-    roomName: "",
-
-    startMonth: "",
-    startYear: "",
-    endMonth: "",
-    endYear: "",
-
-    maxCapacity: "",
-    classDescription: "",
-  });
+  const [form, setForm] = useState<CreateClassForm>(initialForm);
 
   const [created, setCreated] = useState(false);
   const [createdClass, setCreatedClass] = useState<CreatedClass | null>(null);
 
   // grades from API
-  const [gradeOptions, setGradeOptions] = useState<{ value: string; label: string }[]>([]);
+  const [gradeOptions, setGradeOptions] = useState<Option[]>([]);
   const [gradeLoading, setGradeLoading] = useState(false);
   const [gradeError, setGradeError] = useState("");
 
   // create state
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState("");
+
+  // ✅ teacherId từ token đăng nhập
+  const [teacherId, setTeacherId] = useState<string | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    const id = extractTeacherIdFromAccessToken();
+    if (!id) {
+      router.replace("/login");
+      return;
+    }
+    setTeacherId(id);
+    setCheckingAuth(false);
+  }, [router]);
 
   useEffect(() => {
     let mounted = true;
@@ -128,32 +117,13 @@ export default function CreateClassPage() {
 
   function resetForm() {
     setCreateError("");
-    setForm({
-      name: "",
-      gradeId: "",
-      roomName: "",
-      startMonth: "",
-      startYear: "",
-      endMonth: "",
-      endYear: "",
-      maxCapacity: "",
-      classDescription: "",
-    });
+    setForm(initialForm);
   }
 
   function saveSelectedClassId(id: string) {
     try {
       localStorage.setItem(SELECTED_CLASS_ID_KEY, id);
     } catch {}
-  }
-
-  function getTeacherId() {
-    // hiện tại chưa login => mock cứng
-    try {
-      return localStorage.getItem(CURRENT_TEACHER_ID_KEY) || MOCK_TEACHER_ID;
-    } catch {
-      return MOCK_TEACHER_ID;
-    }
   }
 
   function fakeGuid() {
@@ -181,7 +151,11 @@ export default function CreateClassPage() {
     if (!validate()) return;
 
     setCreateError("");
-    const teacherId = getTeacherId();
+
+    if (!teacherId) {
+      router.replace("/login");
+      return;
+    }
 
     const payload = {
       name: form.name.trim(),
@@ -225,38 +199,41 @@ export default function CreateClassPage() {
   }
 
   function handleViewClass() {
-    // nếu có id thì lưu; không có cũng vẫn cho qua trang /main/class
     if (createdClass?.id) saveSelectedClassId(createdClass.id);
     router.push("/main/class");
   }
 
+  // ✅ đang check auth thì đừng render để tránh flash
+  if (checkingAuth) return null;
+  if (!teacherId) return null;
+
   return (
     <div className="w-full">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold mb-2">Chào mừng trở lại!</h1>
-        <p className="text-gray-500">Quản lý lớp học của bạn một cách hiệu quả</p>
+      <div className="mb-7">
+        <h1 className="text-3xl font-semibold text-gray-900 mb-2">Chào mừng trở lại!</h1>
+        <p className="text-base text-gray-500">Quản lý lớp học của bạn một cách hiệu quả</p>
       </div>
 
       {!created ? (
         <>
           {/* Title row */}
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-5">
             <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center"
+              className="w-12 h-12 rounded-2xl flex items-center justify-center"
               style={{ backgroundColor: PRIMARY }}
             >
               <PlusIcon />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Tạo lớp học mới</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Tạo lớp học mới</h2>
               <p className="text-sm text-gray-500">Điền thông tin để tạo lớp học tiểu học</p>
             </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
             <div className="p-6">
-              <div className="text-sm font-semibold text-gray-900 mb-4">Thông tin lớp học</div>
+              <div className="text-base font-semibold text-gray-900 mb-4">Thông tin lớp học</div>
 
               {gradeError ? (
                 <div className="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -305,7 +282,7 @@ export default function CreateClassPage() {
                   <FormField label="Năm học" required>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                        <div className="text-xs text-gray-500 mb-2">Bắt đầu</div>
+                        <div className="text-sm font-medium text-gray-700 mb-2">Bắt đầu</div>
                         <div className="grid grid-cols-2 gap-3">
                           <Input
                             placeholder="Tháng"
@@ -327,7 +304,7 @@ export default function CreateClassPage() {
                       </div>
 
                       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                        <div className="text-xs text-gray-500 mb-2">Kết thúc</div>
+                        <div className="text-sm font-medium text-gray-700 mb-2">Kết thúc</div>
                         <div className="grid grid-cols-2 gap-3">
                           <Input
                             placeholder="Tháng"
@@ -406,11 +383,12 @@ export default function CreateClassPage() {
                 <CheckIcon />
               </div>
 
-              <div className="mt-4 font-semibold text-gray-900">Tạo lớp học thành công!</div>
+              <div className="mt-4 text-lg font-semibold text-gray-900">Tạo lớp học thành công!</div>
               <div className="text-sm text-gray-500 mt-1">Lớp học đã được tạo và sẵn sàng để sử dụng</div>
             </div>
 
-            <div className="mt-6 rounded-xl bg-gray-50 border border-gray-100 p-6">
+            {/* “Bảng” info: text-sm */}
+            <div className="mt-6 rounded-xl bg-gray-50 border border-gray-100 p-6 text-sm">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <InfoItem label="Tên lớp học" value={createdClass?.name || "-"} />
                 <InfoItem label="Khối" value={gradeLabel || "-"} />
@@ -431,7 +409,6 @@ export default function CreateClassPage() {
               </div>
             </div>
 
-            {/* ✅ Chỉ còn 1 nút Xem lớp học */}
             <div className="mt-6">
               <Button variant="primary" className="w-full" onClick={handleViewClass}>
                 Xem lớp học
@@ -452,29 +429,5 @@ function InfoItem({ label, value, className }: { label: string; value: string; c
       <div className="text-xs text-gray-500">{label}</div>
       <div className="text-sm font-medium text-gray-900 mt-1">{value}</div>
     </div>
-  );
-}
-
-/* ---------- icons ---------- */
-
-function PlusIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="text-white">
-      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" className="text-white">
-      <path
-        d="M20 6 9 17l-5-5"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }

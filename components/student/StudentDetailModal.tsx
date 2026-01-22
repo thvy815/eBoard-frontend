@@ -2,7 +2,13 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import type { StudentRow } from "@/types/student";
+
+import type { StudentRow } from "@/types/Student";
+import type { ProvinceDto, WardDto } from "@/types/address";
+import type { UpdateParentInfoRequest } from "@/types/parent";
+
+import { addressService } from "@/services/addressService";
+import { parentService } from "@/services/parentService";
 
 const PRIMARY = "#518581";
 
@@ -10,12 +16,11 @@ type Props = {
   open: boolean;
   student: StudentRow | null;
   onClose: () => void;
-  onSave: (updated: StudentRow) => void;
+  onSave: (updated: StudentRow) => void; // cập nhật list bên ngoài
 };
 
 function isoToVN(iso?: string) {
   if (!iso) return "-";
-  // yyyy-mm-dd -> dd/mm/yyyy
   const [y, m, d] = String(iso).split("-");
   if (!y || !m || !d) return iso;
   return `${d}/${m}/${y}`;
@@ -23,6 +28,11 @@ function isoToVN(iso?: string) {
 
 function isISODate(v: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
+function extractStreetFromAddress(full?: string) {
+  if (!full) return "";
+  return String(full).split(",")[0]?.trim() ?? "";
 }
 
 const GENDER_OPTIONS = [
@@ -33,12 +43,130 @@ const GENDER_OPTIONS = [
 
 export default function StudentDetailModal({ open, student, onClose, onSave }: Props) {
   const [edit, setEdit] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  // working copy for student
   const [form, setForm] = useState<StudentRow | null>(null);
 
+  // parent editable fields (from StudentRow)
+  const [parentName, setParentName] = useState("");
+  const [parentPhone, setParentPhone] = useState("");
+  const [parentEmail, setParentEmail] = useState("");
+  const [parentPassword, setParentPassword] = useState("");
+
+  // address edit state (dropdown like AddStudentModal)
+  const [provinces, setProvinces] = useState<ProvinceDto[]>([]);
+  const [wards, setWards] = useState<WardDto[]>([]);
+  const [provinceCode, setProvinceCode] = useState("");
+  const [wardCode, setWardCode] = useState("");
+  const [street, setStreet] = useState("");
+
+  const [addrLoading, setAddrLoading] = useState(false);
+  const [addrError, setAddrError] = useState("");
+
   useEffect(() => {
+    setSaveError("");
     setEdit(false);
-    setForm(student ? { ...student } : null);
+
+    if (!open || !student) {
+      setForm(null);
+      return;
+    }
+
+    setForm({ ...student });
+
+    // init parent fields
+    setParentName(student.parentName || "");
+    setParentPhone(student.phone || "");
+    setParentEmail(student.email || "");
+    setParentPassword(student.password || "");
+
+    // init street for rebuilding address
+    setStreet(extractStreetFromAddress(student.address));
+
+    // reset dropdown selections (optional: user picks again)
+    setProvinceCode("");
+    setWardCode("");
+    setWards([]);
+    setAddrError("");
   }, [student, open]);
+
+  // load provinces only when enter edit mode
+  useEffect(() => {
+    let mounted = true;
+    if (!open || !edit) return;
+
+    (async () => {
+      try {
+        setAddrLoading(true);
+        setAddrError("");
+        const res = await addressService.getProvinces();
+        if (mounted) setProvinces(res || []);
+      } catch (e: any) {
+        if (mounted) setAddrError(e?.message ?? "Không tải được tỉnh/TP.");
+      } finally {
+        if (mounted) setAddrLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [open, edit]);
+
+  // load wards when province changes
+  useEffect(() => {
+    let mounted = true;
+    if (!open || !edit) return;
+
+    (async () => {
+      try {
+        if (!provinceCode) {
+          setWards([]);
+          setWardCode("");
+          return;
+        }
+        setAddrLoading(true);
+        setAddrError("");
+        const res = await addressService.getWardsByProvinceCode(provinceCode);
+
+        if (!mounted) return;
+        setWards(res || []);
+
+        const ok = (res || []).some((w) => String(w.code) === String(wardCode));
+        if (!ok) setWardCode("");
+      } catch (e: any) {
+        if (mounted) setAddrError(e?.message ?? "Không tải được phường/xã.");
+      } finally {
+        if (mounted) setAddrLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [open, edit, provinceCode]);
+
+  const provinceName = useMemo(() => {
+    const p = provinces.find((x) => String(x.code) === String(provinceCode));
+    return p?.name ?? "";
+  }, [provinces, provinceCode]);
+
+  const wardName = useMemo(() => {
+    const w = wards.find((x) => String(x.code) === String(wardCode));
+    return w?.name ?? "";
+  }, [wards, wardCode]);
+
+  const provinceOptions = useMemo(
+    () => provinces.map((p) => ({ value: String(p.code), label: p.name })),
+    [provinces]
+  );
+
+  const wardOptions = useMemo(
+    () => wards.map((w) => ({ value: String(w.code), label: w.name })),
+    [wards]
+  );
 
   const canSave = useMemo(() => {
     if (!form) return false;
@@ -48,13 +176,16 @@ export default function StudentDetailModal({ open, student, onClose, onSave }: P
     const genderOk = !!form.gender?.trim();
     const relOk = !!form.relationshipWithParent?.trim();
 
+    // address is 1 line
     const addrOk = !!form.address?.trim();
-    const pOk = !!form.province?.trim();
-    const dOk = !!form.district?.trim();
-    const wOk = !!form.ward?.trim();
 
-    return nameOk && dobOk && genderOk && relOk && addrOk && pOk && dOk && wOk;
-  }, [form]);
+    // parent (editable)
+    const pNameOk = !!parentName.trim();
+    const pPhoneOk = !!parentPhone.trim();
+    const pEmailOk = !!parentEmail.trim();
+
+    return nameOk && dobOk && genderOk && relOk && addrOk && pNameOk && pPhoneOk && pEmailOk;
+  }, [form, parentName, parentPhone, parentEmail]);
 
   if (!open || !student || !form) return null;
 
@@ -62,13 +193,69 @@ export default function StudentDetailModal({ open, student, onClose, onSave }: P
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
+  function buildFullAddressFromDropdown() {
+    // district removed
+    return [street.trim(), wardName, provinceName].filter(Boolean).join(", ");
+  }
+
+  async function handleSave() {
+    if (!form) return;
+    if (!canSave) return;
+
+    setSaving(true);
+    setSaveError("");
+
+    try {
+      // ✅ If user selected dropdown values, rebuild address
+      // If user doesn't select province/ward, keep existing form.address
+      const shouldRebuild = !!street.trim() && !!provinceCode && !!wardCode;
+      const nextAddress = shouldRebuild ? buildFullAddressFromDropdown() : form.address;
+
+      // ✅ update student form (district not used, but keep safe)
+      const updatedStudent: StudentRow = {
+        ...form,
+        address: nextAddress,
+        province: "", // not used in DB view, keep empty to avoid stale data
+        district: "", // remove huyện
+        ward: "", // not used in DB view
+        parentName: parentName.trim(),
+        phone: parentPhone.trim(),
+        email: parentEmail.trim(),
+        password: parentPassword, // keep as-is
+      };
+
+      // 1) Save parent info via API
+      // ⚠️ WARNING: StudentRow does not have parentId, so we use student.id as id.
+      const parentPayload: UpdateParentInfoRequest = {
+        fullName: parentName.trim(),
+        email: parentEmail.trim(),
+        phoneNumber: parentPhone.trim(),
+        address: parentAddressFromStudent(updatedStudent.address),
+        healthCondition: "N/A", // StudentRow không có healthCondition, giữ default
+      };
+
+      if (!form.parentId?.trim()) throw new Error("Không tìm thấy parentId để cập nhật phụ huynh.");
+      await parentService.updateParentInfo(form.parentId, parentPayload);
+
+      // 2) notify parent component to update student list UI
+      onSave(updatedStudent);
+
+      setEdit(false);
+      onClose();
+    } catch (e: any) {
+      setSaveError(e?.message ?? "Lưu thay đổi thất bại.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+      <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
         {/* header */}
         <div className="px-6 py-4 flex items-center justify-between" style={{ backgroundColor: PRIMARY }}>
-          <div className="text-white font-semibold">Thông tin chi tiết</div>
+          <div className="text-white font-semibold text-lg">Thông tin chi tiết</div>
           <button
             type="button"
             onClick={onClose}
@@ -79,9 +266,15 @@ export default function StudentDetailModal({ open, student, onClose, onSave }: P
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-5">
-          {/* Section: Student */}
-          <Section icon={<UserIcon />} iconBg="bg-emerald-50 text-emerald-700" title="Thông tin học sinh">
+        <div className="px-6 py-5 space-y-6 text-sm">
+          {saveError ? (
+            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {saveError}
+            </div>
+          ) : null}
+
+          {/* Student */}
+          <Section title="Thông tin học sinh">
             <TwoCol
               label1="Họ và tên"
               value1={
@@ -129,55 +322,90 @@ export default function StudentDetailModal({ open, student, onClose, onSave }: P
               }
             />
 
-            <OneCol
-              label="Địa chỉ (Số nhà, đường)"
-              value={
-                edit ? (
-                  <Input value={form.address || ""} onChange={(v) => setField("address", v)} />
-                ) : (
-                  <TextValue value={student.address || "-"} />
-                )
-              }
-            />
+            {/* address: view 1 line */}
+            {!edit ? (
+              <OneCol label="Địa chỉ" value={<TextValue value={student.address || "-"} />} />
+            ) : (
+              <div className="space-y-3">
+                <div className="text-xs text-gray-400">Địa chỉ (tạo lại từ dropdown)</div>
 
-            <ThreeCol
-              label1="Tỉnh/TP"
-              value1={
-                edit ? (
-                  <Input value={form.province || ""} onChange={(v) => setField("province", v)} placeholder="VD: TP.HCM" />
-                ) : (
-                  <TextValue value={student.province || "-"} />
-                )
-              }
-              label2="Quận/Huyện"
-              value2={
-                edit ? (
-                  <Input value={form.district || ""} onChange={(v) => setField("district", v)} placeholder="VD: Quận 3" />
-                ) : (
-                  <TextValue value={student.district || "-"} />
-                )
-              }
-              label3="Phường/Xã"
-              value3={
-                edit ? (
-                  <Input value={form.ward || ""} onChange={(v) => setField("ward", v)} placeholder="VD: Phường 1" />
-                ) : (
-                  <TextValue value={student.ward || "-"} />
-                )
-              }
-            />
+                {addrError ? (
+                  <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    {addrError}
+                  </div>
+                ) : null}
+
+                <div className="grid grid-cols-3 gap-4">
+                  <Field label="Tỉnh/TP">
+                    <Select
+                      value={provinceCode}
+                      onChange={(v) => {
+                        setProvinceCode(v);
+                        setWardCode("");
+                      }}
+                      options={provinceOptions}
+                      placeholder={addrLoading ? "Đang tải..." : "Chọn tỉnh/TP"}
+                    />
+                  </Field>
+
+                  <Field label="Phường/Xã">
+                    <Select
+                      value={wardCode}
+                      onChange={setWardCode}
+                      options={wardOptions}
+                      placeholder={!provinceCode ? "Chọn tỉnh trước" : addrLoading ? "Đang tải..." : "Chọn phường/xã"}
+                    />
+                  </Field>
+
+                  <Field label="Số nhà, đường">
+                    <Input value={street} onChange={setStreet} placeholder="VD: 25 Trần Phú" />
+                  </Field>
+                </div>
+
+                <div className="text-xs text-gray-500">
+                  Địa chỉ sẽ lưu thành:{" "}
+                  <span className="font-medium text-gray-800">{buildFullAddressFromDropdown() || "-"}</span>
+                </div>
+
+                <div className="text-xs text-gray-500">
+                  (Nếu không chọn Tỉnh/Phường thì giữ nguyên địa chỉ hiện tại.)
+                </div>
+              </div>
+            )}
           </Section>
 
-          {/* Section: Parent (read-only) */}
-          <Section icon={<ParentIcon />} iconBg="bg-amber-50 text-amber-700" title="Thông tin phụ huynh (chỉ xem)">
+          {/* Parent */}
+          <Section title="Thông tin phụ huynh">
             <TwoCol
               label1="Họ và tên"
-              value1={<TextValue value={student.parentName || "-"} />}
+              value1={
+                edit ? <Input value={parentName} onChange={setParentName} /> : <TextValue value={student.parentName || "-"} />
+              }
               label2="Số điện thoại"
-              value2={<TextValue value={student.phone || "-"} badge />}
+              value2={
+                edit ? (
+                  <Input
+                    value={parentPhone}
+                    onChange={(v) => setParentPhone(String(v).replace(/\D/g, "").slice(0, 11))}
+                  />
+                ) : (
+                  <TextValue value={student.phone || "-"} badge />
+                )
+              }
             />
 
-            <OneCol label="Email" value={<TextValue value={student.email || "-"} />} />
+            <TwoCol
+              label1="Email"
+              value1={edit ? <Input value={parentEmail} onChange={setParentEmail} /> : <TextValue value={student.email || "-"} />}
+              label2="Mật khẩu"
+              value2={
+                edit ? (
+                  <Input value={parentPassword} onChange={setParentPassword} placeholder="(tuỳ chọn)" />
+                ) : (
+                  <TextValue value={student.password ? "********" : "-"} badge />
+                )
+              }
+            />
           </Section>
 
           {/* actions */}
@@ -208,29 +436,34 @@ export default function StudentDetailModal({ open, student, onClose, onSave }: P
                   onClick={() => {
                     setEdit(false);
                     setForm({ ...student });
+                    setParentName(student.parentName || "");
+                    setParentPhone(student.phone || "");
+                    setParentEmail(student.email || "");
+                    setParentPassword(student.password || "");
+                    setProvinceCode("");
+                    setWardCode("");
+                    setWards([]);
+                    setStreet(extractStreetFromAddress(student.address));
+                    setAddrError("");
+                    setSaveError("");
                   }}
                   className="flex-1 h-12 rounded-xl border border-gray-200 text-gray-800 hover:bg-gray-50"
+                  disabled={saving}
                 >
                   Hủy
                 </button>
 
                 <button
                   type="button"
-                  disabled={!canSave}
-                  onClick={() => {
-                    if (!form) return;
-                    onSave(form);
-                    setEdit(false);
-                    onClose();
-                  }}
+                  disabled={!canSave || saving}
+                  onClick={handleSave}
                   className={clsx(
                     "flex-1 h-12 rounded-xl text-white font-medium shadow-sm",
-                    !canSave && "opacity-60 cursor-not-allowed"
+                    (!canSave || saving) && "opacity-60 cursor-not-allowed"
                   )}
                   style={{ backgroundColor: PRIMARY }}
-                  title={!canSave ? "Vui lòng nhập đủ thông tin bắt buộc" : "Lưu"}
                 >
-                  Lưu thay đổi
+                  {saving ? "Đang lưu..." : "Lưu thay đổi"}
                 </button>
               </>
             )}
@@ -238,7 +471,7 @@ export default function StudentDetailModal({ open, student, onClose, onSave }: P
 
           {edit && !canSave ? (
             <div className="text-xs text-gray-500">
-              Bắt buộc: Họ tên, Ngày sinh (yyyy-mm-dd), Giới tính, Quan hệ với PH, Địa chỉ, Tỉnh/TP, Quận/Huyện, Phường/Xã.
+              Bắt buộc: Họ tên, Ngày sinh (yyyy-mm-dd), Giới tính, Quan hệ với PH, Địa chỉ, Tên PH, SĐT, Email.
             </div>
           ) : null}
         </div>
@@ -247,24 +480,17 @@ export default function StudentDetailModal({ open, student, onClose, onSave }: P
   );
 }
 
-/* ---------- UI helpers ---------- */
+/* ================= small UI helpers ================= */
 
-function Section({
-  icon,
-  iconBg,
-  title,
-  children,
-}: {
-  icon: React.ReactNode;
-  iconBg: string;
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
       <div className="flex items-center gap-3 mb-3">
-        <div className={clsx("w-8 h-8 rounded-xl flex items-center justify-center", iconBg)}>{icon}</div>
-        <div className="font-semibold text-gray-900">{title}</div>
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-gray-100 text-gray-700">
+          {/* simple dot icon */}
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PRIMARY }} />
+        </div>
+        <div className="font-semibold text-gray-900 text-base">{title}</div>
       </div>
       <div className="space-y-3">{children}</div>
     </div>
@@ -286,30 +512,6 @@ function TwoCol({
     <div className="grid grid-cols-2 gap-4">
       <Field label={label1}>{value1}</Field>
       <Field label={label2}>{value2}</Field>
-    </div>
-  );
-}
-
-function ThreeCol({
-  label1,
-  value1,
-  label2,
-  value2,
-  label3,
-  value3,
-}: {
-  label1: string;
-  value1: React.ReactNode;
-  label2: string;
-  value2: React.ReactNode;
-  label3: string;
-  value3: React.ReactNode;
-}) {
-  return (
-    <div className="grid grid-cols-3 gap-4">
-      <Field label={label1}>{value1}</Field>
-      <Field label={label2}>{value2}</Field>
-      <Field label={label3}>{value3}</Field>
     </div>
   );
 }
@@ -359,12 +561,12 @@ function Input({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className={clsx(
-          "w-full h-10 rounded-lg border px-3 outline-none focus:ring-2",
+          "w-full h-10 rounded-lg border px-3 outline-none focus:ring-2 text-sm",
           error ? "border-red-300" : "border-gray-200"
         )}
         style={{ ["--tw-ring-color" as any]: `${PRIMARY}33` }}
       />
-      {error && <div className="text-xs text-red-500 mt-1">{error}</div>}
+      {error ? <div className="text-xs text-red-500 mt-1">{error}</div> : null}
     </div>
   );
 }
@@ -384,7 +586,7 @@ function Select({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full h-10 rounded-lg border border-gray-200 px-3 outline-none focus:ring-2"
+      className="w-full h-10 rounded-lg border border-gray-200 px-3 outline-none focus:ring-2 text-sm"
       style={{ ["--tw-ring-color" as any]: `${PRIMARY}33` }}
     >
       <option value="">{placeholder || "Chọn"}</option>
@@ -397,7 +599,7 @@ function Select({
   );
 }
 
-/* icons */
+/* icons (tối giản để file self-contained) */
 function XIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -405,19 +607,8 @@ function XIcon() {
     </svg>
   );
 }
-function UserIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path d="M12 12c2.761 0 5-2.239 5-5S14.761 2 12 2 7 4.239 7 7s2.239 5 5 5Z" stroke="currentColor" strokeWidth="2" />
-      <path d="M4 22c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-function ParentIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-      <path d="M16 11a4 4 0 1 0-8 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M4 22c0-4 4-7 8-7s8 3 8 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
+
+/* helper: parent address payload (swagger require address). dùng chung address student */
+function parentAddressFromStudent(studentAddress: string) {
+  return studentAddress || "";
 }

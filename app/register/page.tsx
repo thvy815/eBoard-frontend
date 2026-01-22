@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import clsx from "clsx";
+import { authService } from "@/services/authService";
 
 const PRIMARY = "#518581";
 
@@ -21,24 +22,44 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  const [submitting, setSubmitting] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+
   const isPhoneValid = /^\d{10}$/.test(form.phone);
-  const isPasswordMatch = form.password.length > 0 && form.password === form.confirmPassword;
+  const isPasswordMatch =
+    form.password.length > 0 && form.password === form.confirmPassword;
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm(prev => ({ ...prev, [name]: value }));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setApiError(null);
 
-    if (!form.fullName || !form.email || !form.password || !form.confirmPassword) return;
+    if (!form.fullName || !form.email || !form.password || !form.confirmPassword)
+      return;
     if (!isPhoneValid || !isPasswordMatch) return;
 
-    // TODO: call API register here
+    try {
+      setSubmitting(true);
 
-    // Đăng ký xong chuyển qua login
-    router.push("/login");
+      await authService.registerTeacher({
+        fullName: form.fullName.trim(),
+        phoneNumber: form.phone,
+        email: form.email.trim(),
+        password: form.password,
+        confirmPassword: form.confirmPassword,
+      });
+
+      // Đăng ký xong chuyển qua login
+      router.push("/login");
+    } catch (err: any) {
+      setApiError(err?.message || "Đăng ký thất bại");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -69,6 +90,7 @@ export default function RegisterPage() {
             value={form.fullName}
             onChange={handleChange}
             primary={PRIMARY}
+            disabled={submitting}
           />
 
           <Input
@@ -77,18 +99,18 @@ export default function RegisterPage() {
             placeholder="Nhập số điện thoại (10 chữ số)"
             required
             value={form.phone}
-            onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, "").slice(0, 10);
-                setForm((prev) => ({ ...prev, phone: value }));
+            onChange={e => {
+              const value = e.target.value.replace(/\D/g, "").slice(0, 10);
+              setForm(prev => ({ ...prev, phone: value }));
             }}
             error={
-                form.phone.length > 0 && !isPhoneValid
+              form.phone.length > 0 && !isPhoneValid
                 ? "Số điện thoại phải đúng 10 chữ số"
                 : undefined
             }
             primary={PRIMARY}
-            />
-
+            disabled={submitting}
+          />
 
           <Input
             label="Email"
@@ -98,6 +120,7 @@ export default function RegisterPage() {
             value={form.email}
             onChange={handleChange}
             primary={PRIMARY}
+            disabled={submitting}
           />
 
           <PasswordInput
@@ -106,9 +129,10 @@ export default function RegisterPage() {
             placeholder="Nhập mật khẩu"
             value={form.password}
             show={showPassword}
-            toggle={() => setShowPassword((v) => !v)}
+            toggle={() => setShowPassword(v => !v)}
             onChange={handleChange}
             primary={PRIMARY}
+            disabled={submitting}
           />
 
           <PasswordInput
@@ -117,23 +141,42 @@ export default function RegisterPage() {
             placeholder="Nhập lại mật khẩu"
             value={form.confirmPassword}
             show={showConfirm}
-            toggle={() => setShowConfirm((v) => !v)}
+            toggle={() => setShowConfirm(v => !v)}
             onChange={handleChange}
-            error={form.confirmPassword.length > 0 && !isPasswordMatch ? "Mật khẩu xác nhận không khớp" : undefined}
+            error={
+              form.confirmPassword.length > 0 && !isPasswordMatch
+                ? "Mật khẩu xác nhận không khớp"
+                : undefined
+            }
             primary={PRIMARY}
+            disabled={submitting}
           />
+
+          {apiError && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">
+              {apiError}
+            </p>
+          )}
 
           <button
             type="submit"
-            className="w-full h-12 rounded-lg text-white font-medium transition"
+            className={clsx(
+              "w-full h-12 rounded-lg text-white font-medium transition",
+              submitting && "opacity-80"
+            )}
             style={{ backgroundColor: PRIMARY }}
+            disabled={submitting}
           >
-            Đăng ký tài khoản
+            {submitting ? "Đang đăng ký..." : "Đăng ký tài khoản"}
           </button>
 
           <div className="text-center text-xs text-gray-500">
             Đã có tài khoản?{" "}
-            <Link href="/login" className="hover:underline" style={{ color: PRIMARY }}>
+            <Link
+              href="/login"
+              className="hover:underline"
+              style={{ color: PRIMARY }}
+            >
               Đăng nhập
             </Link>
           </div>
@@ -209,6 +252,7 @@ function PasswordInput({
           onClick={toggle}
           className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center text-gray-500 hover:bg-gray-100 rounded-md"
           title={show ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+          disabled={props.disabled}
         >
           <EyeIcon />
         </button>

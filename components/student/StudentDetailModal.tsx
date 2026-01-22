@@ -146,7 +146,7 @@ export default function StudentDetailModal({ open, student, onClose, onSave }: P
     return () => {
       mounted = false;
     };
-  }, [open, edit, provinceCode]);
+  }, [open, edit, provinceCode, wardCode]);
 
   const provinceName = useMemo(() => {
     const p = provinces.find((x) => String(x.code) === String(provinceCode));
@@ -168,24 +168,8 @@ export default function StudentDetailModal({ open, student, onClose, onSave }: P
     [wards]
   );
 
-  const canSave = useMemo(() => {
-    if (!form) return false;
-
-    const nameOk = !!form.fullName?.trim();
-    const dobOk = !!form.dob && isISODate(form.dob);
-    const genderOk = !!form.gender?.trim();
-    const relOk = !!form.relationshipWithParent?.trim();
-
-    // address is 1 line
-    const addrOk = !!form.address?.trim();
-
-    // parent (editable)
-    const pNameOk = !!parentName.trim();
-    const pPhoneOk = !!parentPhone.trim();
-    const pEmailOk = !!parentEmail.trim();
-
-    return nameOk && dobOk && genderOk && relOk && addrOk && pNameOk && pPhoneOk && pEmailOk;
-  }, [form, parentName, parentPhone, parentEmail]);
+  // ✅ CÁCH 1: luôn cho bấm Lưu khi có form
+  const canSave = useMemo(() => !!form, [form]);
 
   if (!open || !student || !form) return null;
 
@@ -199,55 +183,59 @@ export default function StudentDetailModal({ open, student, onClose, onSave }: P
   }
 
   async function handleSave() {
-    if (!form) return;
-    if (!canSave) return;
+  if (!form) return;
 
-    setSaving(true);
-    setSaveError("");
+  const s = student;          // ✅ snapshot
+  if (!s) return;             // ✅ TS hết báo null
 
-    try {
-      // ✅ If user selected dropdown values, rebuild address
-      // If user doesn't select province/ward, keep existing form.address
-      const shouldRebuild = !!street.trim() && !!provinceCode && !!wardCode;
-      const nextAddress = shouldRebuild ? buildFullAddressFromDropdown() : form.address;
+  setSaving(true);
+  setSaveError("");
 
-      // ✅ update student form (district not used, but keep safe)
-      const updatedStudent: StudentRow = {
-        ...form,
-        address: nextAddress,
-        province: "", // not used in DB view, keep empty to avoid stale data
-        district: "", // remove huyện
-        ward: "", // not used in DB view
-        parentName: parentName.trim(),
-        phone: parentPhone.trim(),
-        email: parentEmail.trim(),
-        password: parentPassword, // keep as-is
-      };
+  try {
+    const shouldRebuild = !!street.trim() && !!provinceCode && !!wardCode;
+    const nextAddress = shouldRebuild ? buildFullAddressFromDropdown() : form.address;
 
-      // 1) Save parent info via API
-      // ⚠️ WARNING: StudentRow does not have parentId, so we use student.id as id.
-      const parentPayload: UpdateParentInfoRequest = {
-        fullName: parentName.trim(),
-        email: parentEmail.trim(),
-        phoneNumber: parentPhone.trim(),
-        address: parentAddressFromStudent(updatedStudent.address),
-        healthCondition: "N/A", // StudentRow không có healthCondition, giữ default
-      };
+    const updatedStudent: StudentRow = {
+      ...form,
+      address: nextAddress,
+      province: "",
+      district: "",
+      ward: "",
+      parentName: parentName.trim() || (s.parentName || ""),
+      phone: parentPhone.trim() || (s.phone || ""),
+      email: parentEmail.trim() || (s.email || ""),
+      password: parentPassword,
+    };
 
-      if (!form.parentId?.trim()) throw new Error("Không tìm thấy parentId để cập nhật phụ huynh.");
-      await parentService.updateParentInfo(form.parentId, parentPayload);
+    const baseParentName = (s.parentName || "").trim();
+    const baseParentPhone = (s.phone || "").trim();
+    const baseParentEmail = (s.email || "").trim();
 
-      // 2) notify parent component to update student list UI
-      onSave(updatedStudent);
+    const nextParentName = parentName.trim() || baseParentName;
+    const nextParentPhone = parentPhone.trim() || baseParentPhone;
+    const nextParentEmail = parentEmail.trim() || baseParentEmail;
 
-      setEdit(false);
-      onClose();
-    } catch (e: any) {
-      setSaveError(e?.message ?? "Lưu thay đổi thất bại.");
-    } finally {
-      setSaving(false);
-    }
+    const parentPayload: UpdateParentInfoRequest = {
+      fullName: nextParentName,
+      email: nextParentEmail,
+      phoneNumber: nextParentPhone,
+      address: parentAddressFromStudent(nextAddress || s.address || ""),
+      healthCondition: "N/A",
+    };
+
+    if (!form.parentId?.trim()) throw new Error("Không tìm thấy parentId để cập nhật phụ huynh.");
+    await parentService.updateParentInfo(form.parentId, parentPayload);
+
+    onSave(updatedStudent);
+    setEdit(false);
+    onClose();
+  } catch (e: any) {
+    setSaveError(e?.message ?? "Lưu thay đổi thất bại.");
+  } finally {
+    setSaving(false);
   }
+}
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
@@ -367,9 +355,7 @@ export default function StudentDetailModal({ open, student, onClose, onSave }: P
                   <span className="font-medium text-gray-800">{buildFullAddressFromDropdown() || "-"}</span>
                 </div>
 
-                <div className="text-xs text-gray-500">
-                  (Nếu không chọn Tỉnh/Phường thì giữ nguyên địa chỉ hiện tại.)
-                </div>
+                <div className="text-xs text-gray-500">(Nếu không chọn Tỉnh/Phường thì giữ nguyên địa chỉ hiện tại.)</div>
               </div>
             )}
           </Section>
@@ -378,16 +364,11 @@ export default function StudentDetailModal({ open, student, onClose, onSave }: P
           <Section title="Thông tin phụ huynh">
             <TwoCol
               label1="Họ và tên"
-              value1={
-                edit ? <Input value={parentName} onChange={setParentName} /> : <TextValue value={student.parentName || "-"} />
-              }
+              value1={edit ? <Input value={parentName} onChange={setParentName} /> : <TextValue value={student.parentName || "-"} />}
               label2="Số điện thoại"
               value2={
                 edit ? (
-                  <Input
-                    value={parentPhone}
-                    onChange={(v) => setParentPhone(String(v).replace(/\D/g, "").slice(0, 11))}
-                  />
+                  <Input value={parentPhone} onChange={(v) => setParentPhone(String(v).replace(/\D/g, "").slice(0, 11))} />
                 ) : (
                   <TextValue value={student.phone || "-"} badge />
                 )
@@ -471,7 +452,7 @@ export default function StudentDetailModal({ open, student, onClose, onSave }: P
 
           {edit && !canSave ? (
             <div className="text-xs text-gray-500">
-              Bắt buộc: Họ tên, Ngày sinh (yyyy-mm-dd), Giới tính, Quan hệ với PH, Địa chỉ, Tên PH, SĐT, Email.
+              (Nút lưu đang tắt vì form chưa sẵn sàng.)
             </div>
           ) : null}
         </div>
@@ -487,7 +468,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div>
       <div className="flex items-center gap-3 mb-3">
         <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-gray-100 text-gray-700">
-          {/* simple dot icon */}
           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PRIMARY }} />
         </div>
         <div className="font-semibold text-gray-900 text-base">{title}</div>

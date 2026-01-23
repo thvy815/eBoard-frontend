@@ -8,7 +8,6 @@ import { FormField } from "@/components/ui/FormField";
 import Input from "@/components/ui/inputType/Input";
 
 import { teacherService } from "@/services/teacherService";
-
 import type { TeacherInfo } from "@/types/teacher";
 import { teacherSession } from "@/services/teacherSession";
 
@@ -30,7 +29,6 @@ function normalizeTeacherForm(x: any): TeacherForm {
   };
 }
 
-// chỉ merge những field user đã sửa (dirty)
 function buildMergedPayload(
   original: TeacherForm,
   current: TeacherForm,
@@ -38,7 +36,7 @@ function buildMergedPayload(
 ) {
   const payload: TeacherForm = { ...original };
   (Object.keys(dirty) as (keyof TeacherForm)[]).forEach((k) => {
-    if (dirty[k]) payload[k] = current[k]; // chỉ field nào sửa mới lấy form hiện tại
+    if (dirty[k]) payload[k] = current[k];
   });
   return payload;
 }
@@ -54,10 +52,8 @@ export default function SettingsPage() {
 
   const [edit, setEdit] = useState(false);
 
-  // dữ liệu gốc từ server
   const [original, setOriginal] = useState<TeacherForm | null>(null);
 
-  // form đang hiển thị (có thể sửa)
   const [form, setForm] = useState<TeacherForm>({
     fullName: "",
     email: "",
@@ -65,7 +61,6 @@ export default function SettingsPage() {
     qualifications: "",
   });
 
-  // đánh dấu field nào đã sửa để patch merge
   const [dirty, setDirty] = useState<Record<keyof TeacherForm, boolean>>({
     fullName: false,
     email: false,
@@ -73,9 +68,17 @@ export default function SettingsPage() {
     qualifications: false,
   });
 
-  // lấy teacherId từ localStorage
+  // ======= Change password states =======
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState("");
+  const [pwOk, setPwOk] = useState("");
+
   useEffect(() => {
-    const id = teacherSession.getTeacherId(); // lấy từ localStorage
+    const id = teacherSession.getTeacherId();
     if (!id) {
       window.location.href = "/login";
       return;
@@ -83,7 +86,6 @@ export default function SettingsPage() {
     setTeacherId(id);
   }, []);
 
-  // ✅ load teacher info theo teacherId
   useEffect(() => {
     if (!teacherId) return;
 
@@ -125,7 +127,6 @@ export default function SettingsPage() {
 
   const canSave = useMemo(() => {
     if (!edit) return false;
-    // cho phép lưu dù có ô trống, chỉ cần có ít nhất 1 field dirty
     return Object.values(dirty).some(Boolean);
   }, [dirty, edit]);
 
@@ -141,7 +142,6 @@ export default function SettingsPage() {
       const payload = buildMergedPayload(original, form, dirty);
       await teacherService.updateTeacherInfo(teacherId, payload);
 
-      // sau khi save OK -> cập nhật original + reset dirty
       setOriginal(payload);
       setForm(payload);
       setDirty({
@@ -171,10 +171,45 @@ export default function SettingsPage() {
     setSaveError("");
   }
 
+  // ======= Change password handler =======
+  const canSavePassword = useMemo(() => {
+    if (!teacherId) return false;
+    if (!oldPassword || !newPassword || !confirmPassword) return false;
+    if (newPassword !== confirmPassword) return false;
+    if (newPassword.length < 6) return false; // rule mềm, BE sẽ validate lại
+    return true;
+  }, [teacherId, oldPassword, newPassword, confirmPassword]);
+
+  async function handleChangePassword() {
+    if (!teacherId) return;
+    if (!canSavePassword) return;
+
+    try {
+      setPwSaving(true);
+      setPwError("");
+      setPwOk("");
+
+      await teacherService.changePassword({
+        id: teacherId,
+        oldPassword,
+        newPassword,
+        confirmPassword,
+      });
+
+      setPwOk("Đổi mật khẩu thành công.");
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (e: any) {
+      setPwError(e?.message ?? "Đổi mật khẩu thất bại.");
+    } finally {
+      setPwSaving(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="max-w-6xl mx-auto px-6 py-7">
-        {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-semibold text-gray-900">Thông tin tài khoản</h1>
           <p className="text-sm text-gray-500 mt-1">Quản lý thông tin cá nhân và bảo mật tài khoản</p>
@@ -225,7 +260,7 @@ export default function SettingsPage() {
 
             {!loading && !loadError ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField label="Họ tên giáo viên" required={false}>
+                <FormField label="Họ tên giáo viên">
                   <Input
                     value={form.fullName}
                     onChange={(e: any) => setField("fullName", e.target.value)}
@@ -234,7 +269,7 @@ export default function SettingsPage() {
                   />
                 </FormField>
 
-                <FormField label="Trình độ chuyên môn" required={false}>
+                <FormField label="Trình độ chuyên môn">
                   <Input
                     value={form.qualifications}
                     onChange={(e: any) => setField("qualifications", e.target.value)}
@@ -243,7 +278,7 @@ export default function SettingsPage() {
                   />
                 </FormField>
 
-                <FormField label="Email" required={false}>
+                <FormField label="Email">
                   <Input
                     value={form.email}
                     onChange={(e: any) => setField("email", e.target.value)}
@@ -252,7 +287,7 @@ export default function SettingsPage() {
                   />
                 </FormField>
 
-                <FormField label="SĐT" required={false}>
+                <FormField label="SĐT">
                   <Input
                     value={form.phoneNumber}
                     onChange={(e: any) =>
@@ -267,7 +302,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Card: Security (UX only) */}
+        {/* Card: Security */}
         <div className="mt-6 bg-white rounded-2xl border border-gray-200 shadow-sm">
           <div className="px-6 py-5">
             <div className="text-lg font-semibold text-gray-900">Bảo mật</div>
@@ -275,22 +310,76 @@ export default function SettingsPage() {
           </div>
 
           <div className="px-6 pb-6">
+            {pwError ? (
+              <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {pwError}
+              </div>
+            ) : null}
+
+            {pwOk ? (
+              <div className="mb-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                {pwOk}
+              </div>
+            ) : null}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField label="Mật khẩu hiện tại">
-                <Input type="password" value="" onChange={() => {}} disabled placeholder="••••••••" className="text-sm" />
+                <Input
+                  type="password"
+                  value={oldPassword}
+                  onChange={(e: any) => {
+                    setPwError("");
+                    setPwOk("");
+                    setOldPassword(e.target.value);
+                  }}
+                  placeholder="••••••••"
+                  className="text-sm"
+                />
               </FormField>
               <div />
+
               <FormField label="Mật khẩu mới">
-                <Input type="password" value="" onChange={() => {}} disabled placeholder="••••••••" className="text-sm" />
+                <Input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e: any) => {
+                    setPwError("");
+                    setPwOk("");
+                    setNewPassword(e.target.value);
+                  }}
+                  placeholder="••••••••"
+                  className="text-sm"
+                />
               </FormField>
+
               <FormField label="Nhập lại mật khẩu mới">
-                <Input type="password" value="" onChange={() => {}} disabled placeholder="••••••••" className="text-sm" />
+                <Input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e: any) => {
+                    setPwError("");
+                    setPwOk("");
+                    setConfirmPassword(e.target.value);
+                  }}
+                  placeholder="••••••••"
+                  className="text-sm"
+                />
               </FormField>
             </div>
 
+            {/* inline validation */}
+            {newPassword && confirmPassword && newPassword !== confirmPassword ? (
+              <div className="mt-3 text-xs text-red-600">Mật khẩu mới và xác nhận mật khẩu không khớp.</div>
+            ) : null}
+
             <div className="mt-5">
-              <Button variant="outline" disabled>
-                Lưu mật khẩu 
+              <Button
+                variant="outline"
+                onClick={handleChangePassword}
+                disabled={!canSavePassword || pwSaving}
+                className={clsx(pwSaving && "opacity-70 cursor-not-allowed")}
+              >
+                {pwSaving ? "Đang lưu..." : "Lưu mật khẩu"}
               </Button>
             </div>
           </div>
